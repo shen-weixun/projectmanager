@@ -1,0 +1,218 @@
+{
+    "uuid": "c8bb8edf-e049-4822-bb4f-f93139b83f93",
+    "lastMigration": 33,
+    "name": "API Mockoon",
+    "endpointPrefix": "api",
+    "latency": 0,
+    "port": 3000,
+    "hostname": "0.0.0.0",
+    "folders": [],
+    "routes": [
+        {
+            "uuid": "680b5fbd-52e7-4eda-9741-54292a3c3562",
+            "type": "http",
+            "documentation": "",
+            "method": "post",
+            "endpoint": "login",
+            "responses": [
+                {
+                    "uuid": "b259616a-3594-4b21-8354-0f72eb98925c",
+                    "body": "{\n  \"status\": 0,\n  \"data\": {\n    \"token\": \"testToken\"\n  }\n}",
+                    "latency": 0,
+                    "statusCode": 200,
+                    "label": "",
+                    "headers": [],
+                    "bodyType": "INLINE",
+                    "filePath": "",
+                    "databucketID": "",
+                    "sendFileAsBody": false,
+                    "rules": [],
+                    "rulesOperator": "OR",
+                    "disableTemplating": false,
+                    "fallbackTo404": false,
+                    "default": true,
+                    "crudKey": "id",
+                    "callbacks": []
+                },
+                {
+                    "uuid": "e777b545-3e3e-4bc9-b964-6725c19b8741",
+                    "body": "{\n  \"status\": 1,\n  \"message\": \"帳號或密碼錯誤\"\n}",
+                    "latency": 0,
+                    "statusCode": 401,
+                    "label": "",
+                    "headers": [],
+                    "bodyType": "INLINE",
+                    "filePath": "",
+                    "databucketID": "",
+                    "sendFileAsBody": false,
+                    "rules": [],
+                    "rulesOperator": "OR",
+                    "disableTemplating": false,
+                    "fallbackTo404": false,
+                    "default": false,
+                    "crudKey": "id",
+                    "callbacks": []
+                }
+            ],
+            "responseMode": null,
+            "streamingMode": null,
+            "streamingInterval": 0
+        },
+        {
+            "uuid": "c505f98a-8293-4a17-b82c-ede0db761e83",
+            "type": "http",
+            "documentation": "",
+            "method": "get",
+            "endpoint": "company/company-info",
+            "responses": [
+                {
+                    "uuid": "020abf97-630c-4216-b5e3-d809fb370001",
+                    "body": "{\n  \"status\": 0,\n  \"data\": {\n    \"CompanyName\": \"廣思通訊\",\n    \"CompanyNameEn\": \"Qamstar TECHNOLOGY CO., LTD.\",\n    \"logo\": \"./src/assets/images/logo.png\"\n  }\n}",
+                    "latency": 0,
+                    "statusCode": 200,
+                    "label": "",
+                    "headers": [],
+                    "bodyType": "INLINE",
+                    "filePath": "",
+                    "databucketID": "",
+                    "sendFileAsBody": false,
+                    "rules": [],
+                    "rulesOperator": "OR",
+                    "disableTemplating": false,
+                    "fallbackTo404": false,
+                    "default": true,
+                    "crudKey": "id",
+                    "callbacks": []
+                }
+            ],
+            "responseMode": null,
+            "streamingMode": null,
+            "streamingInterval": 0
+        },
+        {
+            "uuid": "b4f0188e-2cfc-4ccf-985d-410089f64204",
+            "type": "http",
+            "documentation": "",
+            "method": "get",
+            "endpoint": "project/list",
+            "responses": [
+                {
+                    "uuid": "d791d887-fa31-4a91-bcc5-34dadddb2082",
+                    "body": "{\n  \"status\": 0,\n  \"data\": [\n    {\n      \"id\": 1,\n      \"name\": \"IEOMS 開發\",\n      \"group\": \"研發部\",\n      \"status\": \"進行中\",\n      \"owner\": \"小明\",\n      \"startDate\": \"2024-06-01\",\n      \"dueDate\": \"2024-08-01\"\n    },\n    {\n      \"id\": 2,\n      \"name\": \"供應鏈整合\",\n      \"group\": \"專案部A組\",\n      \"status\": \"尚未開始\",\n      \"owner\": \"小艾\",\n      \"startDate\": \"2024-07-01\",\n      \"dueDate\": \"2024-10-01\"\n    },\n    {\n      \"id\": 3,\n      \"name\": \"客戶關係管理系統\",\n      \"group\": \"專案部B組\",\n      \"status\": \"已完成\",\n      \"owner\": \"小華\",\n      \"startDate\": \"2024-01-01\",\n      \"dueDate\": \"2024-04-01\"\n    },\n    {\n      \"id\": 4,\n      \"name\": \"內部系統升級\",\n      \"group\": \"研發部\",\n      \"status\": \"進行中\",\n      \"owner\": \"小美\",\n      \"startDate\": \"2024-05-01\",\n      \"dueDate\": \"2024-09-02\"\n    },\n    {\n      \"id\": 5,\n      \"name\": \"數據分析平台\",\n      \"group\": \"研發部\",\n      \"status\": \"尚未開始\",\n      \"owner\": \"小強\",\n      \"startDate\": \"2024-08-01\",\n      \"dueDate\": \"2024-12-01\"\n    },\n    {\n      \"id\": 6,\n      \"name\": \"行銷自動化系統\",\n      \"group\": \"行政部\",\n      \"status\": \"進行中\",\n      \"owner\": \"小芳\",\n      \"startDate\": \"2024-06-15\",\n      \"dueDate\": \"2024-11-15\"\n    },\n    {\n      \"id\": 7,\n      \"name\": \"客戶服務系統\",\n      \"group\": \"客服部\",\n      \"status\": \"已完成\",\n      \"owner\": \"小剛\",\n      \"startDate\": \"2024-02-01\",\n      \"dueDate\": \"2024-05-01\"\n    },\n    {\n      \"id\": 8,\n      \"name\": \"財務管理系統\",\n      \"group\": \"財務部\",\n      \"status\": \"進行中\",\n      \"owner\": \"小玲\",\n      \"startDate\": \"2024-03-01\",\n      \"dueDate\": \"2024-07-01\"\n    },\n    {\n      \"id\": 9,\n      \"name\": \"人力資源管理系統\",\n      \"group\": \"人資部\",\n      \"status\": \"進行中\",\n      \"owner\": \"小美\",\n      \"startDate\": \"2024-04-01\",\n      \"dueDate\": \"2024-08-01\"\n    },\n    {\n      \"id\": 10,\n      \"name\": \"產品研發計畫\",\n      \"group\": \"研發部\",\n      \"status\": \"尚未開始\",\n      \"owner\": \"小明\",\n      \"startDate\": \"2024-09-01\",\n      \"dueDate\": \"2025-01-01\"\n    }\n  ]\n}",
+                    "latency": 0,
+                    "statusCode": 200,
+                    "label": "",
+                    "headers": [],
+                    "bodyType": "INLINE",
+                    "filePath": "",
+                    "databucketID": "",
+                    "sendFileAsBody": false,
+                    "rules": [],
+                    "rulesOperator": "OR",
+                    "disableTemplating": false,
+                    "fallbackTo404": false,
+                    "default": true,
+                    "crudKey": "id",
+                    "callbacks": []
+                }
+            ],
+            "responseMode": null,
+            "streamingMode": null,
+            "streamingInterval": 0
+        },
+        {
+            "uuid": "b8efa3c6-7af1-4366-a17a-4f09aaf8dc35",
+            "type": "http",
+            "documentation": "",
+            "method": "get",
+            "endpoint": "user/groups",
+            "responses": [
+                {
+                    "uuid": "2bdf2f4f-c144-430b-a1e7-1ab54fe4bffa",
+                    "body": "{\n  \"status\": 0,\n  \"data\": [\n    {\n      \"id\": 1,\n      \"groupName\": \"研發部\"\n    },\n    {\n      \"id\": 2,\n      \"groupName\": \"專案部A組\"\n    },\n    {\n      \"id\": 3,\n      \"groupName\": \"專案部B組\"\n    },\n    {\n      \"id\": 4,\n      \"groupName\": \"財務部\"\n    },\n    {\n      \"id\": 5,\n      \"groupName\": \"人資部\"\n    },\n    {\n      \"id\": 6,\n      \"groupName\": \"行政部\"\n    }\n  ]\n}",
+                    "latency": 0,
+                    "statusCode": 200,
+                    "label": "",
+                    "headers": [],
+                    "bodyType": "INLINE",
+                    "filePath": "",
+                    "databucketID": "",
+                    "sendFileAsBody": false,
+                    "rules": [],
+                    "rulesOperator": "OR",
+                    "disableTemplating": false,
+                    "fallbackTo404": false,
+                    "default": true,
+                    "crudKey": "id",
+                    "callbacks": []
+                }
+            ],
+            "responseMode": null,
+            "streamingMode": null,
+            "streamingInterval": 0
+        }
+    ],
+    "rootChildren": [
+        {
+            "type": "route",
+            "uuid": "680b5fbd-52e7-4eda-9741-54292a3c3562"
+        },
+        {
+            "type": "route",
+            "uuid": "c505f98a-8293-4a17-b82c-ede0db761e83"
+        },
+        {
+            "type": "route",
+            "uuid": "b4f0188e-2cfc-4ccf-985d-410089f64204"
+        },
+        {
+            "type": "route",
+            "uuid": "b8efa3c6-7af1-4366-a17a-4f09aaf8dc35"
+        }
+    ],
+    "proxyMode": false,
+    "proxyHost": "",
+    "proxyRemovePrefix": false,
+    "tlsOptions": {
+        "enabled": false,
+        "type": "CERT",
+        "pfxPath": "",
+        "certPath": "",
+        "keyPath": "",
+        "caPath": "",
+        "passphrase": ""
+    },
+    "cors": true,
+    "headers": [
+        {
+            "key": "Content-Type",
+            "value": "application/json"
+        },
+        {
+            "key": "Access-Control-Allow-Origin",
+            "value": "*"
+        },
+        {
+            "key": "Access-Control-Allow-Methods",
+            "value": "GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS"
+        },
+        {
+            "key": "Access-Control-Allow-Headers",
+            "value": "Content-Type, Origin, Accept, Authorization, Content-Length, X-Requested-With"
+        }
+    ],
+    "proxyReqHeaders": [
+        {
+            "key": "",
+            "value": ""
+        }
+    ],
+    "proxyResHeaders": [
+        {
+            "key": "",
+            "value": ""
+        }
+    ],
+    "data": [],
+    "callbacks": []
+}

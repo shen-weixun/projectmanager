@@ -1,0 +1,51 @@
+:root {
+  --header-height: 3.9375rem;
+}
+
+.app-layout-main {
+  margin-top: var(--header-height);
+  overflow-x: hidden;
+  overflow-y: visible;
+  padding-top: 1rem;
+  padding-right: 1rem;
+  padding-bottom: 1rem;
+  padding-left: 1rem;
+}
+
+@media (min-width: 768px) {
+  .app-layout-main {
+    padding-left: calc(var(--sidebar-width, 13.875rem) + 1.5rem);
+    padding-right: 1.5rem;
+    padding-bottom: 1.5rem;
+    transition: padding-left 300ms ease;
+  }
+}
+
+.gantt-readable ._3zRJQ,
+.gantt-readable ._3KcaM,
+.gantt-readable ._2q1Kt,
+.gantt-readable ._9w8d5 {
+  fill: #0b1220 !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.01em;
+}
+
+.gantt-readable {
+  position: relative;
+  z-index: 30;
+  overflow: visible !important;
+}
+
+.gantt-readable > div,
+.gantt-readable svg {
+  overflow-y: visible !important;
+}
+
+.gantt-readable [class*='tooltip'],
+.gantt-readable [class*='Tooltip'],
+.gantt-readable [class*='popup'],
+.gantt-readable [class*='Popup'] {
+  position: relative;
+  z-index: 9999 !important;
+}
