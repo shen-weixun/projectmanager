@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Megaphone,
   FolderKanban,
@@ -14,6 +14,10 @@ import {
   CircleCheck,
   BriefcaseBusiness,
   Handshake,
+  ClipboardList,
+  Sun,
+  CheckSquare,
+  ArrowRight,
 } from 'lucide-react'
 import { getProjectDetailAPI, getProjectsAPI } from '@/services/apis'
 import { getRoleKey } from '@/utils/auth'
@@ -45,9 +49,20 @@ type TeamMember = {
   color: string
 }
 
+// 待辦與執行中專案的 Modal 資料
+type TodoItem = {
+  id: number
+  projectId: number
+  projectName: string
+  item: string
+  assignee: string
+  status: string
+  dueDate: string
+  note: string
+}
+
 // ── 管理者角色 ─────────────────────────────────────────────
 const ADMIN_ROLES = ['super', 'boss']
-
 const isAdmin = () => ADMIN_ROLES.includes(getRoleKey() ?? '')
 
 // ── 狀態顏色對應 ───────────────────────────────────────────
@@ -62,7 +77,6 @@ const statusStyle: Record<string, { bg: string; text: string; dot: string }> = {
 }
 const defaultStatus = { bg: 'bg-gray-100', text: 'text-gray-600', dot: 'bg-gray-400' }
 
-// ── 標籤顏色 ──────────────────────────────────────────────
 const tagStyle: Record<string, string> = {
   重要: 'bg-red-100 text-red-700 border-red-200',
   活動: 'bg-amber-100 text-amber-700 border-amber-200',
@@ -70,14 +84,12 @@ const tagStyle: Record<string, string> = {
   一般: 'bg-gray-100 text-gray-600 border-gray-200',
 }
 
-// ── 成員頭像顏色池 ─────────────────────────────────────────
 const avatarColors = [
   'bg-blue-500', 'bg-violet-500', 'bg-emerald-500',
   'bg-amber-500', 'bg-rose-500',  'bg-cyan-500',
   'bg-indigo-500','bg-teal-500',  'bg-pink-500',
 ]
 
-// ── 預設公告（本地示範，管理者可新增/刪除）────────────────
 const DEFAULT_ANNOUNCEMENTS: Announcement[] = [
   {
     id: '1',
@@ -95,7 +107,6 @@ const DEFAULT_ANNOUNCEMENTS: Announcement[] = [
   },
 ]
 
-// ── 預設文件（管理者可新增/刪除）──────────────────────────
 const DEFAULT_DOCUMENTS: Document[] = [
   { id: '1', category: '人事制度', name: '請假單',     icon: '📋' },
   { id: '2', category: '人事制度', name: '加班申請單', icon: '⏰' },
@@ -104,7 +115,6 @@ const DEFAULT_DOCUMENTS: Document[] = [
   { id: '5', category: '行政/財務', name: '費用申請單', icon: '💰' },
 ]
 
-// ── Storage key ────────────────────────────────────────────
 const ANN_KEY = 'home_announcements'
 const DOC_KEY = 'home_documents'
 
@@ -135,6 +145,17 @@ const formatDate = (date: Date) => {
   return `${year}-${month}-${day}`
 }
 
+// 格式化今日日期顯示（例：2026 / 05 / 22 (五)）
+const formatTodayDisplay = () => {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+  const weekDays = ['日', '一', '二', '三', '四', '五', '六']
+  const weekDay = weekDays[today.getDay()]
+  return `${year} / ${month} / ${day} (${weekDay})`
+}
+
 const getThisWeekRange = () => {
   const today = new Date()
   const day = today.getDay()
@@ -142,26 +163,17 @@ const getThisWeekRange = () => {
   const weekStart = new Date(today)
   weekStart.setHours(0, 0, 0, 0)
   weekStart.setDate(today.getDate() + mondayOffset)
-
   const weekEnd = new Date(weekStart)
   weekEnd.setDate(weekStart.getDate() + 6)
   weekEnd.setHours(23, 59, 59, 999)
-
-  return {
-    start: formatDate(weekStart),
-    end: formatDate(weekEnd),
-  }
+  return { start: formatDate(weekStart), end: formatDate(weekEnd) }
 }
 
 const getThisMonthRange = () => {
   const today = new Date()
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
   const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-
-  return {
-    start: formatDate(monthStart),
-    end: formatDate(monthEnd),
-  }
+  return { start: formatDate(monthStart), end: formatDate(monthEnd) }
 }
 
 const isDateInRange = (date: string | undefined, start: string, end: string) =>
@@ -175,9 +187,8 @@ const isProjectInWeek = (project: Project, weekStart: string, weekEnd: string) =
 }
 
 const COMPLETED_STATUSES = ['已完成', '已結案', '完成', '結案']
-
 const isCompletedStatus = (status?: string) =>
-  COMPLETED_STATUSES.some((completedStatus) => status?.includes(completedStatus))
+  COMPLETED_STATUSES.some((s) => status?.includes(s))
 
 const normalizePointKey = (value?: string) => value?.trim().toLowerCase() ?? ''
 
@@ -192,50 +203,286 @@ const isOverdue = (date: string | undefined, today: string) => Boolean(date && d
 const calculateProjectPointScores = (projectDetails: ProjectDetail[]) => {
   const today = formatDate(new Date())
   const scores: Record<string, number> = {}
-
   projectDetails.forEach((project) => {
     if (isCompletedStatus(project.status)) {
       addPoints(scores, project.projectOwner || project.owner, 30)
     }
-
     project.todoItems?.forEach((item) => {
-      if (isCompletedStatus(item.status)) {
-        addPoints(scores, item.assignee, 5)
-      } else if (isOverdue(item.dueDate, today)) {
-        addPoints(scores, item.assignee, -3)
-      }
+      if (isCompletedStatus(item.status)) addPoints(scores, item.assignee, 5)
+      else if (isOverdue(item.dueDate, today)) addPoints(scores, item.assignee, -3)
     })
-
     project.scheduleItems?.forEach((item) => {
-      if (isCompletedStatus(item.status)) {
-        addPoints(scores, item.assignee, 10)
-      } else if (isOverdue(item.endDate, today)) {
-        addPoints(scores, item.assignee, -3)
-      }
+      if (isCompletedStatus(item.status)) addPoints(scores, item.assignee, 10)
+      else if (isOverdue(item.endDate, today)) addPoints(scores, item.assignee, -3)
     })
-
     project.checkpointItems?.forEach((item) => {
-      if (isCompletedStatus(item.status)) {
-        addPoints(scores, item.assignee, 8)
-      } else if (isOverdue(item.reviewDate, today)) {
-        addPoints(scores, item.assignee, -3)
-      }
+      if (isCompletedStatus(item.status)) addPoints(scores, item.assignee, 8)
+      else if (isOverdue(item.reviewDate, today)) addPoints(scores, item.assignee, -3)
     })
   })
-
   return scores
 }
 
 const getStoredUserAccount = () => {
   const token = localStorage.getItem('token') || sessionStorage.getItem('token')
   if (!token) return ''
-
   try {
     const payload = JSON.parse(atob(token.split('.')[1])) as Record<string, unknown>
     return String(payload.account ?? payload.username ?? payload.name ?? '')
   } catch {
     return ''
   }
+}
+
+// ── 問候語（依時段）────────────────────────────────────────
+const getGreeting = () => {
+  const hour = new Date().getHours()
+  if (hour < 12) return '早安'
+  if (hour < 18) return '午安'
+  return '晚安'
+}
+
+// ── 待辦 Modal ─────────────────────────────────────────────
+type TodoModalProps = {
+  open: boolean
+  onClose: () => void
+  todos: TodoItem[]
+  loading: boolean
+}
+
+const TodoModal = ({ open, onClose, todos, loading }: TodoModalProps) => {
+  const overlayRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [open, onClose])
+
+  if (!open) return null
+
+  const todoStatusStyle: Record<string, string> = {
+    尚未開始: 'bg-slate-100 text-slate-600',
+    進行中: 'bg-amber-100 text-amber-700',
+    已完成: 'bg-emerald-100 text-emerald-700',
+  }
+
+  return (
+    <div
+      ref={overlayRef}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === overlayRef.current) onClose() }}
+    >
+      <div className="relative w-full max-w-2xl mx-4 bg-white rounded-2xl shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-amber-50 to-orange-50">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center justify-center w-9 h-9 rounded-xl bg-amber-100 text-amber-600">
+              <ClipboardList size={18} />
+            </span>
+            <div>
+              <h3 className="text-base font-bold text-gray-800">我的待辦事項</h3>
+              <p className="text-xs text-gray-500">來自各專案中尚未完成的工作項目</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="max-h-[60vh] overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-16 text-gray-400">
+              <div className="text-center">
+                <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                <p className="text-sm">載入中...</p>
+              </div>
+            </div>
+          ) : todos.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+              <CheckSquare size={40} className="mb-3 text-emerald-300" />
+              <p className="text-base font-semibold text-gray-500">所有待辦都完成了！</p>
+              <p className="text-sm text-gray-400 mt-1">目前沒有未完成的待辦事項</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {todos.map((todo) => (
+                <div key={`${todo.projectId}-${todo.id}`} className="flex items-start gap-4 px-6 py-4 hover:bg-gray-50/60 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <a
+                        href={`/project-management/${todo.projectId}`}
+                        className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline transition-colors truncate max-w-[180px]"
+                      >
+                        {todo.projectName}
+                      </a>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${todoStatusStyle[todo.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                        {todo.status}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium text-gray-800">{todo.item}</p>
+                    <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                      {todo.assignee && (
+                        <span className="text-xs text-gray-500">👤 {todo.assignee}</span>
+                      )}
+                      {todo.dueDate && (
+                        <span className={`text-xs font-medium ${todo.dueDate < formatDate(new Date()) ? 'text-red-500' : 'text-gray-400'}`}>
+                          📅 {todo.dueDate}
+                          {todo.dueDate < formatDate(new Date()) && ' (逾期)'}
+                        </span>
+                      )}
+                    </div>
+                    {todo.note && (
+                      <p className="text-xs text-gray-400 mt-1 line-clamp-1">備註：{todo.note}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {todos.length > 0 && (
+          <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+            <span className="text-xs text-gray-500">共 {todos.length} 筆待辦</span>
+            <a
+              href="/project-management"
+              className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              前往專案管理 <ArrowRight size={12} />
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── 執行中專案 Modal ────────────────────────────────────────
+type ActiveProjectsModalProps = {
+  open: boolean
+  onClose: () => void
+  projects: Project[]
+  loading: boolean
+}
+
+const ActiveProjectsModal = ({ open, onClose, projects, loading }: ActiveProjectsModalProps) => {
+  const overlayRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [open, onClose])
+
+  if (!open) return null
+
+  return (
+    <div
+      ref={overlayRef}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === overlayRef.current) onClose() }}
+    >
+      <div className="relative w-full max-w-2xl mx-4 bg-white rounded-2xl shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center justify-center w-9 h-9 rounded-xl bg-blue-100 text-blue-600">
+              <BriefcaseBusiness size={18} />
+            </span>
+            <div>
+              <h3 className="text-base font-bold text-gray-800">執行中專案</h3>
+              <p className="text-xs text-gray-500">目前狀態為「進行中」的所有專案</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="max-h-[60vh] overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-16 text-gray-400">
+              <div className="text-center">
+                <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                <p className="text-sm">載入中...</p>
+              </div>
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+              <FolderKanban size={40} className="mb-3 text-gray-300" />
+              <p className="text-base font-semibold text-gray-500">目前沒有進行中的專案</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {projects.map((proj) => {
+                const st = statusStyle[proj.status] ?? defaultStatus
+                return (
+                  <a
+                    key={proj.id}
+                    href={`/project-management/${proj.id}`}
+                    className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50/60 transition-colors group"
+                  >
+                    <span className={`flex items-center justify-center w-9 h-9 rounded-xl shrink-0 ${st.bg}`}>
+                      <FolderKanban size={16} className={st.text} />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 group-hover:text-blue-600 transition-colors truncate">
+                        {proj.name}
+                      </p>
+                      <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                        {proj.customer && (
+                          <span className="text-xs text-gray-500 truncate">🏢 {proj.customer}</span>
+                        )}
+                        {(proj.projectOwner || proj.owner) && (
+                          <span className="text-xs text-gray-500">👤 {proj.projectOwner || proj.owner}</span>
+                        )}
+                        {proj.group && (
+                          <span className="text-xs text-gray-500">🏷️ {proj.group}</span>
+                        )}
+                      </div>
+                      {proj.dueDate && (
+                        <p className="text-xs text-gray-400 mt-0.5">截止：{proj.dueDate}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1.5 ${st.bg} ${st.text}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
+                        {proj.status}
+                      </span>
+                      <ChevronRight size={14} className="text-gray-300 group-hover:text-blue-400 transition-colors" />
+                    </div>
+                  </a>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {projects.length > 0 && (
+          <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+            <span className="text-xs text-gray-500">共 {projects.length} 個執行中專案</span>
+            <a
+              href="/project-management"
+              className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              前往專案管理 <ArrowRight size={12} />
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 // ════════════════════════════════════════════════════════════
@@ -255,10 +502,7 @@ const HomePage = () => {
 
   const addAnnouncement = () => {
     if (!annForm.title.trim()) return
-    const next = [
-      { ...annForm, id: Date.now().toString() },
-      ...announcements,
-    ]
+    const next = [{ ...annForm, id: Date.now().toString() }, ...announcements]
     setAnnouncements(next)
     saveJSON(ANN_KEY, next)
     setAnnForm({ tag: '一般', title: '', content: '', date: new Date().toISOString().slice(0, 10) })
@@ -271,7 +515,7 @@ const HomePage = () => {
     saveJSON(ANN_KEY, next)
   }
 
-  // ── 專案 ─────────────────────────────────────────────────
+  // ── 本週專案 ──────────────────────────────────────────────
   const [projects, setProjects] = useState<Project[]>([])
   const [projectsLoading, setProjectsLoading] = useState(true)
 
@@ -308,13 +552,7 @@ const HomePage = () => {
     if (!docForm.name.trim() || !docForm.category.trim()) return
     const next = [
       ...documents,
-      {
-        ...docForm,
-        category: docForm.category.trim(),
-        name: docForm.name.trim(),
-        link: docForm.link.trim(),
-        id: Date.now().toString(),
-      },
+      { ...docForm, category: docForm.category.trim(), name: docForm.name.trim(), link: docForm.link.trim(), id: Date.now().toString() },
     ]
     setDocuments(next)
     saveJSON(DOC_KEY, next)
@@ -334,9 +572,7 @@ const HomePage = () => {
   }
 
   const saveDocumentLink = (id: string) => {
-    const next = documents.map((doc) =>
-      doc.id === id ? { ...doc, link: linkDraft.trim() } : doc
-    )
+    const next = documents.map((doc) => doc.id === id ? { ...doc, link: linkDraft.trim() } : doc)
     setDocuments(next)
     saveJSON(DOC_KEY, next)
     setEditingLinkDocId(null)
@@ -392,73 +628,189 @@ const HomePage = () => {
       )
       setMemberPointScores(
         calculateProjectPointScores(
-          details
-            .filter((detail) => detail.status === 0)
-            .map((detail) => detail.data)
+          details.filter((detail) => detail.status === 0).map((detail) => detail.data)
         )
       )
     })
   }, [])
 
-  // 依分類分組文件
+  // ── 🆕 歡迎欄：待辦事項 & 執行中專案 ────────────────────
+  const currentUserAccount = getStoredUserAccount()
+  const [todoModalOpen, setTodoModalOpen] = useState(false)
+  const [activeProjectsModalOpen, setActiveProjectsModalOpen] = useState(false)
+
+  // 待辦事項（從所有專案的 todoItems 中撈出未完成的）
+  const [pendingTodos, setPendingTodos] = useState<TodoItem[]>([])
+  const [todosLoading, setTodosLoading] = useState(false)
+  const [todosLoaded, setTodosLoaded] = useState(false)
+
+  // 執行中專案
+  const [activeProjects, setActiveProjects] = useState<Project[]>([])
+  const [activeProjectsLoading, setActiveProjectsLoading] = useState(false)
+  const [activeProjectsLoaded, setActiveProjectsLoaded] = useState(false)
+
+  // 載入待辦（lazy：只在打開 modal 時載入）
+  const loadTodos = async () => {
+    if (todosLoaded) return
+    setTodosLoading(true)
+    try {
+      const res = await getProjectsAPI({ pageSize: 200 })
+      if (res.status !== 0) return
+      const detailResults = await Promise.all(
+        res.data.items.map((p) => getProjectDetailAPI(p.id))
+      )
+      const todos: TodoItem[] = []
+      detailResults.forEach((result) => {
+        if (result.status !== 0) return
+        const detail = result.data
+        ;(detail.todoItems ?? []).forEach((item) => {
+          if (!isCompletedStatus(item.status)) {
+            todos.push({
+              id: item.id,
+              projectId: detail.id,
+              projectName: detail.name,
+              item: item.item,
+              assignee: item.assignee ?? '',
+              status: item.status ?? '尚未開始',
+              dueDate: item.dueDate ?? '',
+              note: item.note ?? '',
+            })
+          }
+        })
+      })
+      // 逾期優先排序
+      todos.sort((a, b) => {
+        const today = formatDate(new Date())
+        const aOverdue = a.dueDate && a.dueDate < today ? -1 : 0
+        const bOverdue = b.dueDate && b.dueDate < today ? -1 : 0
+        return aOverdue - bOverdue
+      })
+      setPendingTodos(todos)
+      setTodosLoaded(true)
+    } finally {
+      setTodosLoading(false)
+    }
+  }
+
+  // 載入執行中專案（lazy）
+  const loadActiveProjects = async () => {
+    if (activeProjectsLoaded) return
+    setActiveProjectsLoading(true)
+    try {
+      const res = await getProjectsAPI({ pageSize: 200, status: '進行中' })
+      if (res.status === 0) {
+        setActiveProjects(res.data.items)
+        setActiveProjectsLoaded(true)
+      }
+    } finally {
+      setActiveProjectsLoading(false)
+    }
+  }
+
+  const handleOpenTodoModal = () => {
+    setTodoModalOpen(true)
+    loadTodos()
+  }
+
+  const handleOpenActiveProjectsModal = () => {
+    setActiveProjectsModalOpen(true)
+    loadActiveProjects()
+  }
+
+  // 統計用（快速計算，不需要 lazy load）
+  const activeProjectCount = allProjects.filter((p) => p.status === '進行中').length
+
   const docCategories = Array.from(new Set(documents.map((d) => d.category)))
+
   const getMemberPoints = (member: TeamMember) => {
     const aliases = Array.from(new Set(member.aliases.map(normalizePointKey).filter(Boolean)))
     return aliases.reduce((total, alias) => total + (memberPointScores[alias] ?? 0), 0)
   }
   const sortedMembers = [...members].sort((a, b) => getMemberPoints(b) - getMemberPoints(a))
-  const currentUserKey = normalizePointKey(getStoredUserAccount())
+  const currentUserKey = normalizePointKey(currentUserAccount)
   const currentMember = members.find((member) =>
     member.aliases.some((alias) => normalizePointKey(alias) === currentUserKey)
   )
   const currentUserPoints = currentMember
     ? getMemberPoints(currentMember)
     : memberPointScores[currentUserKey] ?? 0
+
   const monthRange = getThisMonthRange()
-  const monthlySubmittedCount = allProjects.filter((project) =>
-    isDateInRange(project.dueDate, monthRange.start, monthRange.end)
+  const monthlySubmittedCount = allProjects.filter((p) =>
+    isDateInRange(p.dueDate, monthRange.start, monthRange.end)
   ).length
-  const monthlyPassedCount = allProjects.filter((project) =>
-    isDateInRange(project.dueDate, monthRange.start, monthRange.end) && isCompletedStatus(project.status)
+  const monthlyPassedCount = allProjects.filter((p) =>
+    isDateInRange(p.dueDate, monthRange.start, monthRange.end) && isCompletedStatus(p.status)
   ).length
-  const activeProjectCount = allProjects.filter((project) => project.status === '進行中').length
-  const monthlySignedCount = allProjects.filter((project) =>
-    isDateInRange(project.dueDate, monthRange.start, monthRange.end) && project.status === '已結案'
+  const monthlySignedCount = allProjects.filter((p) =>
+    isDateInRange(p.dueDate, monthRange.start, monthRange.end) && p.status === '已結案'
   ).length
+
   const monthlyAchievementCards = [
-    {
-      label: '送件數',
-      value: monthlySubmittedCount,
-      icon: Send,
-      iconClass: 'bg-blue-50 text-blue-600',
-      cardClass: 'bg-blue-50/50',
-    },
-    {
-      label: '過案數',
-      value: monthlyPassedCount,
-      icon: CircleCheck,
-      iconClass: 'bg-emerald-50 text-emerald-600',
-      cardClass: 'bg-emerald-50/50',
-    },
-    {
-      label: '執行中專案',
-      value: activeProjectCount,
-      icon: BriefcaseBusiness,
-      iconClass: 'bg-violet-50 text-violet-600',
-      cardClass: 'bg-violet-50/50',
-    },
-    {
-      label: '成功簽約',
-      value: monthlySignedCount,
-      icon: Handshake,
-      iconClass: 'bg-orange-50 text-orange-600',
-      cardClass: 'bg-orange-50/50',
-    },
+    { label: '送件數', value: monthlySubmittedCount, icon: Send, iconClass: 'bg-blue-50 text-blue-600', cardClass: 'bg-blue-50/50' },
+    { label: '過案數', value: monthlyPassedCount, icon: CircleCheck, iconClass: 'bg-emerald-50 text-emerald-600', cardClass: 'bg-emerald-50/50' },
+    { label: '執行中專案', value: activeProjectCount, icon: BriefcaseBusiness, iconClass: 'bg-violet-50 text-violet-600', cardClass: 'bg-violet-50/50' },
+    { label: '成功簽約', value: monthlySignedCount, icon: Handshake, iconClass: 'bg-orange-50 text-orange-600', cardClass: 'bg-orange-50/50' },
   ]
 
   return (
     <div className="w-full max-w-[1400px] mx-auto pb-10 space-y-6">
 
+      {/* ══ 🆕 歡迎橫幅（三欄）══════════════════════════════ */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-0 rounded-2xl border border-blue-100 bg-white shadow-sm overflow-hidden">
+        {/* 欄 1：問候 + 日期 */}
+        <div className="flex items-center gap-4 px-6 py-5 bg-gradient-to-br from-amber-50 to-yellow-50 border-b sm:border-b-0 sm:border-r border-blue-100">
+          <span className="flex items-center justify-center w-12 h-12 rounded-2xl bg-amber-100 text-2xl shrink-0">
+            <Sun size={26} className="text-amber-500" />
+          </span>
+          <div>
+            <p className="text-xl font-bold text-gray-800">
+              {getGreeting()}，{currentUserAccount || '用戶'}！
+            </p>
+            <p className="text-sm text-gray-500 mt-0.5">{formatTodayDisplay()}</p>
+          </div>
+        </div>
+
+        {/* 欄 2：今日待辦 */}
+        <div className="flex items-center gap-4 px-6 py-5 bg-white border-b sm:border-b-0 sm:border-r border-blue-100 hover:bg-orange-50/30 transition-colors">
+          <span className="flex items-center justify-center w-12 h-12 rounded-2xl bg-orange-100 shrink-0">
+            <ClipboardList size={22} className="text-orange-500" />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-2xl font-bold text-gray-900 leading-none">
+              {todosLoaded ? pendingTodos.length : '—'}
+            </p>
+            <p className="text-sm text-gray-500 mt-0.5">今日待辦</p>
+            <button
+              onClick={handleOpenTodoModal}
+              className="flex items-center gap-1 text-xs font-semibold text-orange-600 hover:text-orange-800 mt-1.5 transition-colors group"
+            >
+              查看待辦
+              <ArrowRight size={11} className="group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          </div>
+        </div>
+
+        {/* 欄 3：執行中專案 */}
+        <div className="flex items-center gap-4 px-6 py-5 bg-white hover:bg-blue-50/30 transition-colors">
+          <span className="flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-100 shrink-0">
+            <BriefcaseBusiness size={22} className="text-blue-500" />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-2xl font-bold text-gray-900 leading-none">{activeProjectCount}</p>
+            <p className="text-sm text-gray-500 mt-0.5">執行中專案</p>
+            <button
+              onClick={handleOpenActiveProjectsModal}
+              className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 mt-1.5 transition-colors group"
+            >
+              查看專案
+              <ArrowRight size={11} className="group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 個人積點 ───────────────────────────────────────── */}
       <div className="grid grid-cols-1 justify-end gap-4 lg:grid-cols-[minmax(240px,320px)]">
         <div className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-white px-6 py-4 shadow-sm">
           <span className="flex h-14 w-14 items-center justify-center rounded-full bg-orange-50 text-orange-500">
@@ -494,7 +846,6 @@ const HomePage = () => {
             )}
           </div>
 
-          {/* 管理者新增表單 */}
           {admin && showAnnForm && (
             <div className="px-6 py-4 bg-blue-50/60 border-b border-blue-100 space-y-3">
               <div className="flex gap-2">
@@ -656,7 +1007,6 @@ const HomePage = () => {
             )}
           </div>
 
-          {/* 管理者新增表單 */}
           {admin && showDocForm && (
             <div className="px-6 py-4 bg-amber-50/60 border-b border-amber-100 space-y-3">
               <div className="flex gap-2">
@@ -718,9 +1068,7 @@ const HomePage = () => {
                         onClick={() => openDocumentLink(doc)}
                         title={doc.link ? getDocumentHref(doc.link) : '尚未設定連結'}
                         className={`relative flex flex-col items-center gap-1.5 p-3 rounded-xl border border-gray-100 bg-gray-50 transition-colors group ${
-                          doc.link
-                            ? 'cursor-pointer hover:bg-blue-50 hover:border-blue-200'
-                            : 'cursor-default hover:bg-gray-50'
+                          doc.link ? 'cursor-pointer hover:bg-blue-50 hover:border-blue-200' : 'cursor-default hover:bg-gray-50'
                         }`}
                       >
                         <span className="text-2xl">{doc.icon}</span>
@@ -730,10 +1078,7 @@ const HomePage = () => {
                             <button
                               type="button"
                               aria-label="編輯連結"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                startEditingDocumentLink(doc)
-                              }}
+                              onClick={(e) => { e.stopPropagation(); startEditingDocumentLink(doc) }}
                               className="text-gray-300 hover:text-blue-600 transition-colors"
                             >
                               <Link size={12} />
@@ -763,10 +1108,7 @@ const HomePage = () => {
                             <div className="mt-2 flex justify-end gap-1.5">
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setEditingLinkDocId(null)
-                                  setLinkDraft('')
-                                }}
+                                onClick={() => { setEditingLinkDocId(null); setLinkDraft('') }}
                                 className="text-[11px] text-gray-500 hover:text-gray-700 px-2 py-1 rounded-md border border-gray-200 hover:bg-gray-50"
                               >
                                 取消
@@ -811,24 +1153,24 @@ const HomePage = () => {
               {sortedMembers.map((m) => {
                 const points = getMemberPoints(m)
                 return (
-                <div key={m.id} className="flex flex-col items-center gap-2 rounded-xl p-3 hover:bg-gray-50 transition-colors">
-                  <div className={`w-12 h-12 rounded-full ${m.color} flex items-center justify-center text-white text-lg font-bold shadow-sm`}>
-                    {m.initial}
+                  <div key={m.id} className="flex flex-col items-center gap-2 rounded-xl p-3 hover:bg-gray-50 transition-colors">
+                    <div className={`w-12 h-12 rounded-full ${m.color} flex items-center justify-center text-white text-lg font-bold shadow-sm`}>
+                      {m.initial}
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-gray-800 leading-tight">{m.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5 leading-tight">{m.jobTitle}</p>
+                      <p className="mt-1 text-sm font-bold text-blue-600">{points} pts</p>
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <p className="text-sm font-semibold text-gray-800 leading-tight">{m.name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5 leading-tight">{m.jobTitle}</p>
-                    <p className="mt-1 text-sm font-bold text-blue-600">{points} pts</p>
-                  </div>
-                </div>
                 )
               })}
             </div>
           </div>
         </div>
-
       </div>
 
+      {/* ══ 本月公司成果 ═════════════════════════════════════ */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 pt-5">
           <h2 className="text-lg font-bold text-gray-800">本月公司成果</h2>
@@ -856,6 +1198,20 @@ const HomePage = () => {
           })}
         </div>
       </div>
+
+      {/* ══ Modals ═══════════════════════════════════════════ */}
+      <TodoModal
+        open={todoModalOpen}
+        onClose={() => setTodoModalOpen(false)}
+        todos={pendingTodos}
+        loading={todosLoading}
+      />
+      <ActiveProjectsModal
+        open={activeProjectsModalOpen}
+        onClose={() => setActiveProjectsModalOpen(false)}
+        projects={activeProjects}
+        loading={activeProjectsLoading}
+      />
     </div>
   )
 }
