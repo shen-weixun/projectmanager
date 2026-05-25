@@ -18,7 +18,7 @@ const AppLayout = () => {
   const title = getPageTitle(location.pathname)
 
   return (
-    <div className="min-h-screen bg-amber-50">
+    <div className="min-h-screen bg-[#f5f8fc]">
       <PageMeta title={title} />
       <Header title={title} />
       <Sidebar />

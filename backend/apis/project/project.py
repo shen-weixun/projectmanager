@@ -1,5 +1,6 @@
 # Project 主檔 API：處理專案列表、甘特圖、建立、詳情、主檔更新與刪除。
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from db.core import get_db
@@ -56,6 +57,8 @@ async def project_list(
     status: str | None = None,
     group: str | None = None,
     category: str | None = Query(None),      # 確認有這行
+    start: str | None = None,
+    end: str | None = None,
     sortKey: str = Query("planStartDate"),
     sortDirection: str = Query("asc"),
     keyword: str | None = None,
@@ -81,6 +84,18 @@ async def project_list(
         else:
             category_list = list(category)
         query = query.filter(Project.category.in_(category_list))
+
+    if start:
+        query = query.filter(Project.due_date >= start)
+    if end:
+        query = query.filter(
+            or_(
+                Project.start_date <= end,
+                Project.plan_start_date <= end,
+                Project.pre_start_date <= end,
+            )
+        )
+
     # 關鍵字篩選
     # TODO: 前端目前沒有設計關鍵字搜尋欄位
     if keyword:

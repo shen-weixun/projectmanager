@@ -1,8 +1,23 @@
 import { useEffect, useState } from 'react'
-import { Megaphone, FolderKanban, FileText, Users, Plus, X, ChevronRight, Pencil, Check } from 'lucide-react'
-import { getProjectsAPI } from '@/services/apis'
+import {
+  Megaphone,
+  FolderKanban,
+  FileText,
+  Users,
+  Plus,
+  X,
+  ChevronRight,
+  Check,
+  Link,
+  Star,
+  Send,
+  CircleCheck,
+  BriefcaseBusiness,
+  Handshake,
+} from 'lucide-react'
+import { getProjectDetailAPI, getProjectsAPI } from '@/services/apis'
 import { getRoleKey } from '@/utils/auth'
-import type { Project } from '@/types/api'
+import type { Project, ProjectDetail } from '@/types/api'
 
 // ── 型別定義 ──────────────────────────────────────────────
 type Announcement = {
@@ -18,11 +33,13 @@ type Document = {
   category: string
   name: string
   icon: string
+  link?: string
 }
 
 type TeamMember = {
   id: number
   name: string
+  aliases: string[]
   jobTitle: string
   initial: string
   color: string
@@ -104,6 +121,123 @@ const saveJSON = <T,>(key: string, value: T) => {
   localStorage.setItem(key, JSON.stringify(value))
 }
 
+const getDocumentHref = (link?: string) => {
+  const trimmed = link?.trim()
+  if (!trimmed) return ''
+  if (/^(https?:\/\/|mailto:|tel:|\/|#)/i.test(trimmed)) return trimmed
+  return `https://${trimmed}`
+}
+
+const formatDate = (date: Date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const getThisWeekRange = () => {
+  const today = new Date()
+  const day = today.getDay()
+  const mondayOffset = day === 0 ? -6 : 1 - day
+  const weekStart = new Date(today)
+  weekStart.setHours(0, 0, 0, 0)
+  weekStart.setDate(today.getDate() + mondayOffset)
+
+  const weekEnd = new Date(weekStart)
+  weekEnd.setDate(weekStart.getDate() + 6)
+  weekEnd.setHours(23, 59, 59, 999)
+
+  return {
+    start: formatDate(weekStart),
+    end: formatDate(weekEnd),
+  }
+}
+
+const getThisMonthRange = () => {
+  const today = new Date()
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+
+  return {
+    start: formatDate(monthStart),
+    end: formatDate(monthEnd),
+  }
+}
+
+const isDateInRange = (date: string | undefined, start: string, end: string) =>
+  Boolean(date && date >= start && date <= end)
+
+const isProjectInWeek = (project: Project, weekStart: string, weekEnd: string) => {
+  const startDate = project.startDate || project.planStartDate || project.preStartDate
+  const dueDate = project.dueDate
+  if (!startDate || !dueDate) return false
+  return startDate <= weekEnd && dueDate >= weekStart
+}
+
+const COMPLETED_STATUSES = ['已完成', '已結案', '完成', '結案']
+
+const isCompletedStatus = (status?: string) =>
+  COMPLETED_STATUSES.some((completedStatus) => status?.includes(completedStatus))
+
+const normalizePointKey = (value?: string) => value?.trim().toLowerCase() ?? ''
+
+const addPoints = (scores: Record<string, number>, assignee: string | undefined, points: number) => {
+  const key = normalizePointKey(assignee)
+  if (!key) return
+  scores[key] = (scores[key] ?? 0) + points
+}
+
+const isOverdue = (date: string | undefined, today: string) => Boolean(date && date < today)
+
+const calculateProjectPointScores = (projectDetails: ProjectDetail[]) => {
+  const today = formatDate(new Date())
+  const scores: Record<string, number> = {}
+
+  projectDetails.forEach((project) => {
+    if (isCompletedStatus(project.status)) {
+      addPoints(scores, project.projectOwner || project.owner, 30)
+    }
+
+    project.todoItems?.forEach((item) => {
+      if (isCompletedStatus(item.status)) {
+        addPoints(scores, item.assignee, 5)
+      } else if (isOverdue(item.dueDate, today)) {
+        addPoints(scores, item.assignee, -3)
+      }
+    })
+
+    project.scheduleItems?.forEach((item) => {
+      if (isCompletedStatus(item.status)) {
+        addPoints(scores, item.assignee, 10)
+      } else if (isOverdue(item.endDate, today)) {
+        addPoints(scores, item.assignee, -3)
+      }
+    })
+
+    project.checkpointItems?.forEach((item) => {
+      if (isCompletedStatus(item.status)) {
+        addPoints(scores, item.assignee, 8)
+      } else if (isOverdue(item.reviewDate, today)) {
+        addPoints(scores, item.assignee, -3)
+      }
+    })
+  })
+
+  return scores
+}
+
+const getStoredUserAccount = () => {
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+  if (!token) return ''
+
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1])) as Record<string, unknown>
+    return String(payload.account ?? payload.username ?? payload.name ?? '')
+  } catch {
+    return ''
+  }
+}
+
 // ════════════════════════════════════════════════════════════
 // HomePage Component
 // ════════════════════════════════════════════════════════════
@@ -142,8 +276,21 @@ const HomePage = () => {
   const [projectsLoading, setProjectsLoading] = useState(true)
 
   useEffect(() => {
-    getProjectsAPI({ pageSize: 20 }).then((res) => {
-      if (res.status === 0) setProjects(res.data.items)
+    const weekRange = getThisWeekRange()
+    getProjectsAPI({
+      pageSize: 100,
+      sortKey: 'planStartDate',
+      sortDirection: 'asc',
+      start: weekRange.start,
+      end: weekRange.end,
+    }).then((res) => {
+      if (res.status === 0) {
+        setProjects(
+          res.data.items.filter((project) =>
+            isProjectInWeek(project, weekRange.start, weekRange.end)
+          )
+        )
+      }
       setProjectsLoading(false)
     })
   }, [])
@@ -153,14 +300,25 @@ const HomePage = () => {
     loadJSON(DOC_KEY, DEFAULT_DOCUMENTS)
   )
   const [showDocForm, setShowDocForm] = useState(false)
-  const [docForm, setDocForm] = useState({ category: '', name: '', icon: '📄' })
+  const [docForm, setDocForm] = useState({ category: '', name: '', icon: '📄', link: '' })
+  const [editingLinkDocId, setEditingLinkDocId] = useState<string | null>(null)
+  const [linkDraft, setLinkDraft] = useState('')
 
   const addDocument = () => {
     if (!docForm.name.trim() || !docForm.category.trim()) return
-    const next = [...documents, { ...docForm, id: Date.now().toString() }]
+    const next = [
+      ...documents,
+      {
+        ...docForm,
+        category: docForm.category.trim(),
+        name: docForm.name.trim(),
+        link: docForm.link.trim(),
+        id: Date.now().toString(),
+      },
+    ]
     setDocuments(next)
     saveJSON(DOC_KEY, next)
-    setDocForm({ category: '', name: '', icon: '📄' })
+    setDocForm({ category: '', name: '', icon: '📄', link: '' })
     setShowDocForm(false)
   }
 
@@ -170,9 +328,32 @@ const HomePage = () => {
     saveJSON(DOC_KEY, next)
   }
 
+  const startEditingDocumentLink = (doc: Document) => {
+    setEditingLinkDocId(doc.id)
+    setLinkDraft(doc.link ?? '')
+  }
+
+  const saveDocumentLink = (id: string) => {
+    const next = documents.map((doc) =>
+      doc.id === id ? { ...doc, link: linkDraft.trim() } : doc
+    )
+    setDocuments(next)
+    saveJSON(DOC_KEY, next)
+    setEditingLinkDocId(null)
+    setLinkDraft('')
+  }
+
+  const openDocumentLink = (doc: Document) => {
+    const href = getDocumentHref(doc.link)
+    if (!href) return
+    window.open(href, '_blank', 'noopener,noreferrer')
+  }
+
   // ── 團隊成員 ──────────────────────────────────────────────
   const [members, setMembers] = useState<TeamMember[]>([])
   const [membersLoading, setMembersLoading] = useState(true)
+  const [memberPointScores, setMemberPointScores] = useState<Record<string, number>>({})
+  const [allProjects, setAllProjects] = useState<Project[]>([])
 
   useEffect(() => {
     fetch('/api/users/list', {
@@ -187,6 +368,7 @@ const HomePage = () => {
             (u: { id: number; account: string; name: string; job_title?: string }, i: number) => ({
               id: u.id,
               name: u.account,
+              aliases: [u.account, u.name].filter(Boolean),
               jobTitle: u.job_title ?? '—',
               initial: u.account?.charAt(0)?.toUpperCase() ?? '?',
               color: avatarColors[i % avatarColors.length],
@@ -201,11 +383,93 @@ const HomePage = () => {
       .finally(() => setMembersLoading(false))
   }, [])
 
+  useEffect(() => {
+    getProjectsAPI({ pageSize: 100 }).then(async (res) => {
+      if (res.status !== 0) return
+      setAllProjects(res.data.items)
+      const details = await Promise.all(
+        res.data.items.map((project) => getProjectDetailAPI(project.id))
+      )
+      setMemberPointScores(
+        calculateProjectPointScores(
+          details
+            .filter((detail) => detail.status === 0)
+            .map((detail) => detail.data)
+        )
+      )
+    })
+  }, [])
+
   // 依分類分組文件
   const docCategories = Array.from(new Set(documents.map((d) => d.category)))
+  const getMemberPoints = (member: TeamMember) => {
+    const aliases = Array.from(new Set(member.aliases.map(normalizePointKey).filter(Boolean)))
+    return aliases.reduce((total, alias) => total + (memberPointScores[alias] ?? 0), 0)
+  }
+  const sortedMembers = [...members].sort((a, b) => getMemberPoints(b) - getMemberPoints(a))
+  const currentUserKey = normalizePointKey(getStoredUserAccount())
+  const currentMember = members.find((member) =>
+    member.aliases.some((alias) => normalizePointKey(alias) === currentUserKey)
+  )
+  const currentUserPoints = currentMember
+    ? getMemberPoints(currentMember)
+    : memberPointScores[currentUserKey] ?? 0
+  const monthRange = getThisMonthRange()
+  const monthlySubmittedCount = allProjects.filter((project) =>
+    isDateInRange(project.dueDate, monthRange.start, monthRange.end)
+  ).length
+  const monthlyPassedCount = allProjects.filter((project) =>
+    isDateInRange(project.dueDate, monthRange.start, monthRange.end) && isCompletedStatus(project.status)
+  ).length
+  const activeProjectCount = allProjects.filter((project) => project.status === '進行中').length
+  const monthlySignedCount = allProjects.filter((project) =>
+    isDateInRange(project.dueDate, monthRange.start, monthRange.end) && project.status === '已結案'
+  ).length
+  const monthlyAchievementCards = [
+    {
+      label: '送件數',
+      value: monthlySubmittedCount,
+      icon: Send,
+      iconClass: 'bg-blue-50 text-blue-600',
+      cardClass: 'bg-blue-50/50',
+    },
+    {
+      label: '過案數',
+      value: monthlyPassedCount,
+      icon: CircleCheck,
+      iconClass: 'bg-emerald-50 text-emerald-600',
+      cardClass: 'bg-emerald-50/50',
+    },
+    {
+      label: '執行中專案',
+      value: activeProjectCount,
+      icon: BriefcaseBusiness,
+      iconClass: 'bg-violet-50 text-violet-600',
+      cardClass: 'bg-violet-50/50',
+    },
+    {
+      label: '成功簽約',
+      value: monthlySignedCount,
+      icon: Handshake,
+      iconClass: 'bg-orange-50 text-orange-600',
+      cardClass: 'bg-orange-50/50',
+    },
+  ]
 
   return (
     <div className="w-full max-w-[1400px] mx-auto pb-10 space-y-6">
+
+      <div className="grid grid-cols-1 justify-end gap-4 lg:grid-cols-[minmax(240px,320px)]">
+        <div className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-white px-6 py-4 shadow-sm">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-orange-50 text-orange-500">
+            <Star size={28} />
+          </span>
+          <div className="min-w-0">
+            <p className="text-3xl font-bold leading-none text-gray-900">{currentUserPoints}</p>
+            <p className="mt-1 text-sm font-semibold text-gray-700">個人積點</p>
+          </div>
+        </div>
+      </div>
 
       {/* ══ 第一列：公告 + 專案進度 ══════════════════════════ */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -318,7 +582,7 @@ const HomePage = () => {
               <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-violet-50 text-violet-600">
                 <FolderKanban size={16} />
               </span>
-              <h2 className="text-base font-bold text-gray-800">重要執行中專案</h2>
+              <h2 className="text-base font-bold text-gray-800">本週專案</h2>
             </div>
             <a
               href="/project-management"
@@ -333,7 +597,7 @@ const HomePage = () => {
               <p className="px-6 py-10 text-center text-sm text-gray-400">載入中...</p>
             )}
             {!projectsLoading && projects.length === 0 && (
-              <p className="px-6 py-10 text-center text-sm text-gray-400">目前無專案資料</p>
+              <p className="px-6 py-10 text-center text-sm text-gray-400">本週無專案資料</p>
             )}
             {projects.map((proj) => {
               const st = statusStyle[proj.status] ?? defaultStatus
@@ -350,7 +614,10 @@ const HomePage = () => {
                     <p className="text-sm font-semibold text-gray-800 truncate group-hover:text-blue-600 transition-colors">
                       {proj.name}
                     </p>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <p className="text-xs text-gray-500 mt-0.5 truncate">
+                      公司：{proj.customer || '—'}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5 truncate">
                       {proj.projectOwner || proj.owner || '—'}
                       {proj.group ? ` · ${proj.group}` : ''}
                     </p>
@@ -412,6 +679,12 @@ const HomePage = () => {
                 onChange={(e) => setDocForm({ ...docForm, name: e.target.value })}
                 className="w-full text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
               />
+              <input
+                placeholder="連結網址（例如：https://example.com/form）"
+                value={docForm.link}
+                onChange={(e) => setDocForm({ ...docForm, link: e.target.value })}
+                className="w-full text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
               <div className="flex gap-2">
                 <button
                   onClick={addDocument}
@@ -442,17 +715,71 @@ const HomePage = () => {
                     .map((doc) => (
                       <div
                         key={doc.id}
-                        className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl border border-gray-100 bg-gray-50 hover:bg-blue-50 hover:border-blue-200 transition-colors cursor-pointer group"
+                        onClick={() => openDocumentLink(doc)}
+                        title={doc.link ? getDocumentHref(doc.link) : '尚未設定連結'}
+                        className={`relative flex flex-col items-center gap-1.5 p-3 rounded-xl border border-gray-100 bg-gray-50 transition-colors group ${
+                          doc.link
+                            ? 'cursor-pointer hover:bg-blue-50 hover:border-blue-200'
+                            : 'cursor-default hover:bg-gray-50'
+                        }`}
                       >
                         <span className="text-2xl">{doc.icon}</span>
                         <span className="text-xs font-semibold text-gray-700 text-center leading-tight">{doc.name}</span>
                         {admin && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); removeDocument(doc.id) }}
-                            className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all"
+                          <div className="absolute top-1 right-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              type="button"
+                              aria-label="編輯連結"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                startEditingDocumentLink(doc)
+                              }}
+                              className="text-gray-300 hover:text-blue-600 transition-colors"
+                            >
+                              <Link size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="刪除文件"
+                              onClick={(e) => { e.stopPropagation(); removeDocument(doc.id) }}
+                              className="text-gray-300 hover:text-red-500 transition-colors"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        )}
+                        {admin && editingLinkDocId === doc.id && (
+                          <div
+                            className="absolute inset-x-2 top-2 z-10 rounded-lg border border-blue-100 bg-white p-2 shadow-lg"
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            <X size={12} />
-                          </button>
+                            <input
+                              autoFocus
+                              value={linkDraft}
+                              onChange={(e) => setLinkDraft(e.target.value)}
+                              placeholder="貼上連結網址"
+                              className="w-full text-xs border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                            />
+                            <div className="mt-2 flex justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingLinkDocId(null)
+                                  setLinkDraft('')
+                                }}
+                                className="text-[11px] text-gray-500 hover:text-gray-700 px-2 py-1 rounded-md border border-gray-200 hover:bg-gray-50"
+                              >
+                                取消
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => saveDocumentLink(doc.id)}
+                                className="text-[11px] font-semibold bg-blue-600 text-white px-2 py-1 rounded-md hover:bg-blue-700"
+                              >
+                                儲存
+                              </button>
+                            </div>
+                          </div>
                         )}
                       </div>
                     ))}
@@ -481,21 +808,53 @@ const HomePage = () => {
               <p className="text-center text-sm text-gray-400 py-6">暫無成員資料</p>
             )}
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
-              {members.map((m) => (
-                <div key={m.id} className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-gray-50 transition-colors">
+              {sortedMembers.map((m) => {
+                const points = getMemberPoints(m)
+                return (
+                <div key={m.id} className="flex flex-col items-center gap-2 rounded-xl p-3 hover:bg-gray-50 transition-colors">
                   <div className={`w-12 h-12 rounded-full ${m.color} flex items-center justify-center text-white text-lg font-bold shadow-sm`}>
                     {m.initial}
                   </div>
                   <div className="text-center">
                     <p className="text-sm font-semibold text-gray-800 leading-tight">{m.name}</p>
                     <p className="text-xs text-gray-400 mt-0.5 leading-tight">{m.jobTitle}</p>
+                    <p className="mt-1 text-sm font-bold text-blue-600">{points} pts</p>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </div>
 
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 pt-5">
+          <h2 className="text-lg font-bold text-gray-800">本月公司成果</h2>
+        </div>
+        <div className="grid grid-cols-1 gap-5 px-6 py-5 sm:grid-cols-2 xl:grid-cols-4">
+          {monthlyAchievementCards.map((card) => {
+            const Icon = card.icon
+            return (
+              <div
+                key={card.label}
+                className={`flex min-h-[96px] items-center gap-5 rounded-xl px-6 py-4 ${card.cardClass}`}
+              >
+                <span className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${card.iconClass}`}>
+                  <Icon size={28} />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-600">{card.label}</p>
+                  <div className="mt-1 flex items-end gap-1.5">
+                    <span className="text-3xl font-bold leading-none text-slate-900">{card.value}</span>
+                    <span className="pb-0.5 text-sm font-semibold text-slate-600">件</span>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
@@ -503,12 +862,12 @@ const HomePage = () => {
 
 // ── Fallback 示範成員 ──────────────────────────────────────
 const FALLBACK_MEMBERS: TeamMember[] = [
-  { id: 1, name: 'admin',  jobTitle: '系統超級管理員', initial: 'A', color: 'bg-blue-500'    },
-  { id: 2, name: 'bbb',    jobTitle: 'Boss 管理員',   initial: 'B', color: 'bg-violet-500'  },
-  { id: 3, name: 'PPP',    jobTitle: 'PM Leader',     initial: 'P', color: 'bg-emerald-500' },
-  { id: 4, name: 'ppp',    jobTitle: 'PM User',       initial: 'P', color: 'bg-amber-500'   },
-  { id: 5, name: 'RRR',    jobTitle: 'RD Leader',     initial: 'R', color: 'bg-rose-500'    },
-  { id: 6, name: 'rrr',    jobTitle: 'RD User',       initial: 'R', color: 'bg-cyan-500'    },
+  { id: 1, name: 'admin',  aliases: ['admin'], jobTitle: '系統超級管理員', initial: 'A', color: 'bg-blue-500'    },
+  { id: 2, name: 'bbb',    aliases: ['bbb'],   jobTitle: 'Boss 管理員',   initial: 'B', color: 'bg-violet-500'  },
+  { id: 3, name: 'PPP',    aliases: ['PPP'],   jobTitle: 'PM Leader',     initial: 'P', color: 'bg-emerald-500' },
+  { id: 4, name: 'ppp',    aliases: ['ppp'],   jobTitle: 'PM User',       initial: 'P', color: 'bg-amber-500'   },
+  { id: 5, name: 'RRR',    aliases: ['RRR'],   jobTitle: 'RD Leader',     initial: 'R', color: 'bg-rose-500'    },
+  { id: 6, name: 'rrr',    aliases: ['rrr'],   jobTitle: 'RD User',       initial: 'R', color: 'bg-cyan-500'    },
 ]
 
 export default HomePage

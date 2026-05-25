@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import axios from "axios";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { getToken, getRoleKey } from "@/utils/auth";
@@ -17,8 +17,14 @@ interface CustomTable {
 interface UserBlock {
   user_id: number;
   user_name: string;
+  user_account?: string;
   is_current_user: boolean;
   tables: CustomTable[];
+}
+
+interface UserAccount {
+  id: number;
+  account: string;
 }
 
 // 可以建立自己表格的角色
@@ -65,7 +71,7 @@ export default function RDWeeklyReport() {
   // 顯示用的週次範圍字串
   const weekRangeLabel = `${formatDisplay(currentMonday)} ~ ${formatDisplay(currentSunday)}`;
 
-  const getRequestConfig = () => {
+  const getRequestConfig = useCallback(() => {
     const token = getToken();
     return {
       headers: {
@@ -73,30 +79,40 @@ export default function RDWeeklyReport() {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     };
-  };
+  }, []);
 
   const canCreate = CAN_CREATE_ROLES.includes(roleKey ?? "");
 
-  const fetchWeeklyData = async (week: string) => {
+  const fetchWeeklyData = useCallback(async (week: string) => {
     setLoading(true);
     try {
-      const response = await axios.get(
-        `/api/rd/tables/grouped?week_start=${week}`,
-        getRequestConfig()
-      );
+      const [response, usersResponse] = await Promise.all([
+        axios.get(`/api/rd/tables/grouped?week_start=${week}`, getRequestConfig()),
+        axios.get("/api/users/list", getRequestConfig()),
+      ]);
       if (response.data && response.data.status === 0) {
-        setBlocks(response.data.data);
+        const accountById = new Map<number, string>(
+          usersResponse.data?.status === 0
+            ? usersResponse.data.data.map((user: UserAccount) => [user.id, user.account])
+            : []
+        );
+        setBlocks(
+          response.data.data.map((block: UserBlock) => ({
+            ...block,
+            user_name: block.user_account || accountById.get(block.user_id) || block.user_name,
+          }))
+        );
       }
     } catch (error) {
       console.error("撈取資料失敗:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [getRequestConfig]);
 
   useEffect(() => {
     fetchWeeklyData(weekStart);
-  }, [weekStart]);
+  }, [fetchWeeklyData, weekStart]);
 
   // 上一週
   const handlePrevWeek = () => {
@@ -133,7 +149,7 @@ export default function RDWeeklyReport() {
       if (response.data && response.data.status === 0) {
         fetchWeeklyData(weekStart);
       }
-    } catch (error) {
+    } catch {
       alert("建立表格失敗，請確認您的帳號權限（需要 rd_user 或以上角色）");
     } finally {
       setCreating(false);
@@ -150,7 +166,7 @@ export default function RDWeeklyReport() {
       if (response.data && response.data.status === 0) {
         fetchWeeklyData(weekStart);
       }
-    } catch (error) {
+    } catch {
       alert("儲存失敗，請確認您只能修改自己的表格");
     }
   };
@@ -166,7 +182,7 @@ export default function RDWeeklyReport() {
       if (response.data && response.data.status === 0) {
         fetchWeeklyData(weekStart);
       }
-    } catch (error) {
+    } catch {
       alert("刪除失敗");
     }
   };

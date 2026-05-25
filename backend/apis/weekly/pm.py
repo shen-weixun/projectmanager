@@ -43,6 +43,12 @@ def get_user_role_keys_set(db: Session, uid: int) -> set[str]:
     return {r.role_key for r in rows}
 
 
+def weekly_panel_name(user_obj: User | None) -> str:
+    if not user_obj:
+        return "未知用戶"
+    return user_obj.account or user_obj.name or "未知用戶"
+
+
 # --- Pydantic 傳輸格式校驗 ---
 
 class TableCreatePayload(BaseModel):
@@ -84,7 +90,7 @@ async def get_grouped_pm_tables(
         if u_id not in grouped_data:
             grouped_data[u_id] = {
                 "user_id": u_id,
-                "user_name": t.creator.name if t.creator else "未知用戶",
+                "user_name": weekly_panel_name(t.creator),
                 "is_current_user": u_id == current_uid,
                 "tables": [],
             }
@@ -112,7 +118,7 @@ async def get_grouped_pm_tables(
             if pm.id not in grouped_data:
                 grouped_data[pm.id] = {
                     "user_id": pm.id,
-                    "user_name": pm.name,
+                    "user_name": weekly_panel_name(pm),
                     "is_current_user": pm.id == current_uid,
                     "tables": [],
                 }
@@ -122,7 +128,7 @@ async def get_grouped_pm_tables(
             active_user = db.query(User).filter(User.id == current_uid).first()
             grouped_data[current_uid] = {
                 "user_id": current_uid,
-                "user_name": active_user.name if active_user else "我",
+                "user_name": weekly_panel_name(active_user),
                 "is_current_user": True,
                 "tables": [],
             }
@@ -132,7 +138,7 @@ async def get_grouped_pm_tables(
         active_user = db.query(User).filter(User.id == current_uid).first()
         grouped_data[current_uid] = {
             "user_id": current_uid,
-            "user_name": active_user.name if active_user else "我",
+            "user_name": weekly_panel_name(active_user),
             "is_current_user": True,
             "tables": [],
         }
@@ -142,7 +148,7 @@ async def get_grouped_pm_tables(
         active_user = db.query(User).filter(User.id == current_uid).first()
         grouped_data[current_uid] = {
             "user_id": current_uid,
-            "user_name": active_user.name if active_user else "我",
+            "user_name": weekly_panel_name(active_user),
             "is_current_user": True,
             "tables": [],
         }
