@@ -170,14 +170,11 @@ const HomePage = () => {
     saveJSON(DOC_KEY, next)
   }
 
-  // ── 團隊成員（從 user/groups 取得群組，用戶由 user/profile 取得）──
-  // 因為目前沒有「取得所有使用者」的前端 API，我們直接呼叫後端 /api/users/list
-  // 若沒有該 API，則顯示 fallback 示範資料
+  // ── 團隊成員 ──────────────────────────────────────────────
   const [members, setMembers] = useState<TeamMember[]>([])
   const [membersLoading, setMembersLoading] = useState(true)
 
   useEffect(() => {
-    // 嘗試呼叫後端取得成員清單（若後端有此 endpoint）
     fetch('/api/users/list', {
       headers: {
         Authorization: `Bearer ${localStorage.getItem('token') ?? sessionStorage.getItem('token') ?? ''}`,
@@ -187,17 +184,16 @@ const HomePage = () => {
       .then((data) => {
         if (data?.status === 0 && Array.isArray(data.data)) {
           const mapped: TeamMember[] = data.data.map(
-            (u: { id: number; name: string; job_title?: string; jobTitle?: string }, i: number) => ({
+            (u: { id: number; account: string; name: string; job_title?: string }, i: number) => ({
               id: u.id,
-              name: u.name,
-              jobTitle: u.job_title ?? u.jobTitle ?? '—',
-              initial: u.name?.charAt(0) ?? '?',
+              name: u.account,
+              jobTitle: u.job_title ?? '—',
+              initial: u.account?.charAt(0)?.toUpperCase() ?? '?',
               color: avatarColors[i % avatarColors.length],
             })
           )
           setMembers(mapped)
         } else {
-          // fallback 示範資料
           setMembers(FALLBACK_MEMBERS)
         }
       })
@@ -507,12 +503,12 @@ const HomePage = () => {
 
 // ── Fallback 示範成員 ──────────────────────────────────────
 const FALLBACK_MEMBERS: TeamMember[] = [
-  { id: 1, name: '系統管理員', jobTitle: '超級管理員',  initial: '管', color: 'bg-blue-500'    },
-  { id: 2, name: 'Boss',      jobTitle: '管理者',      initial: 'B', color: 'bg-violet-500'  },
-  { id: 3, name: 'PM Leader', jobTitle: 'PM 主管',     initial: 'P', color: 'bg-emerald-500' },
-  { id: 4, name: 'PM User',   jobTitle: 'PM 人員',     initial: 'P', color: 'bg-amber-500'   },
-  { id: 5, name: 'RD Leader', jobTitle: 'RD 主管',     initial: 'R', color: 'bg-rose-500'    },
-  { id: 6, name: 'RD User',   jobTitle: 'RD 人員',     initial: 'R', color: 'bg-cyan-500'    },
+  { id: 1, name: 'admin',  jobTitle: '系統超級管理員', initial: 'A', color: 'bg-blue-500'    },
+  { id: 2, name: 'bbb',    jobTitle: 'Boss 管理員',   initial: 'B', color: 'bg-violet-500'  },
+  { id: 3, name: 'PPP',    jobTitle: 'PM Leader',     initial: 'P', color: 'bg-emerald-500' },
+  { id: 4, name: 'ppp',    jobTitle: 'PM User',       initial: 'P', color: 'bg-amber-500'   },
+  { id: 5, name: 'RRR',    jobTitle: 'RD Leader',     initial: 'R', color: 'bg-rose-500'    },
+  { id: 6, name: 'rrr',    jobTitle: 'RD User',       initial: 'R', color: 'bg-cyan-500'    },
 ]
 
 export default HomePage

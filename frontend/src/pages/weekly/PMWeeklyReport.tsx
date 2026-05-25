@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { getToken, getRoleKey } from "@/utils/auth";
 
 interface TableData {
@@ -20,26 +21,49 @@ interface UserBlock {
   tables: CustomTable[];
 }
 
-// PM 相關角色：這些角色才能進入此頁面（與 App.tsx 的 PM_ROLE_KEYS 一致）
-const PM_ROLES = ["super", "boss", "pm_leader", "pm_user"];
-
 // 可以建立自己表格的角色
 const CAN_CREATE_ROLES = ["pm_user", "pm_leader", "super", "boss"];
+
+// 取得指定日期所在週的週一
+const getMondayOf = (date: Date): Date => {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+// 格式化為 YYYY-MM-DD（給 API 用）
+const toISODate = (d: Date) => d.toISOString().split("T")[0];
+
+// 格式化為 YYYY/MM/DD（顯示用）
+const formatDisplay = (d: Date) =>
+  `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
 
 export default function PMWeeklyReport() {
   const roleKey = getRoleKey();
 
-  const getSelectedWeekMonday = () => {
-    const today = new Date();
-    const day = today.getDay();
-    const diff = today.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(today.setDate(diff)).toISOString().split("T")[0];
-  };
+  // 以 Date 物件管理當前週的週一
+  const [currentMonday, setCurrentMonday] = useState<Date>(() =>
+    getMondayOf(new Date())
+  );
 
-  const [currentWeek, setCurrentWeek] = useState<string>(getSelectedWeekMonday());
   const [blocks, setBlocks] = useState<UserBlock[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [creating, setCreating] = useState<boolean>(false);
+
+  // 週日（週一 + 6 天）
+  const currentSunday = new Date(currentMonday);
+  currentSunday.setDate(currentMonday.getDate() + 6);
+
+  // 傳給 API 的字串
+  const weekStart = toISODate(currentMonday);
+
+  // 顯示用的週次範圍字串
+  const weekRangeLabel = `${formatDisplay(currentMonday)} ~ ${formatDisplay(currentSunday)}`;
 
   const getRequestConfig = () => {
     const token = getToken();
@@ -51,10 +75,6 @@ export default function PMWeeklyReport() {
     };
   };
 
-  // 判斷目前使用者是否有自己的區塊
-  const hasMyBlock = blocks.some((b) => b.is_current_user);
-
-  // 判斷目前使用者能否建立表格
   const canCreate = CAN_CREATE_ROLES.includes(roleKey ?? "");
 
   const fetchWeeklyData = async (week: string) => {
@@ -75,8 +95,31 @@ export default function PMWeeklyReport() {
   };
 
   useEffect(() => {
-    fetchWeeklyData(currentWeek);
-  }, [currentWeek]);
+    fetchWeeklyData(weekStart);
+  }, [weekStart]);
+
+  // 上一週
+  const handlePrevWeek = () => {
+    setCurrentMonday((prev) => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() - 7);
+      return d;
+    });
+  };
+
+  // 下一週
+  const handleNextWeek = () => {
+    setCurrentMonday((prev) => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() + 7);
+      return d;
+    });
+  };
+
+  // 回到本週
+  const handleThisWeek = () => {
+    setCurrentMonday(getMondayOf(new Date()));
+  };
 
   const handleCreateNewTable = async () => {
     if (creating) return;
@@ -84,11 +127,11 @@ export default function PMWeeklyReport() {
     try {
       const response = await axios.post(
         "/api/pm/tables",
-        { week_start: currentWeek, table_name: "未命名表格" },
+        { week_start: weekStart, table_name: "未命名表格" },
         getRequestConfig()
       );
       if (response.data && response.data.status === 0) {
-        fetchWeeklyData(currentWeek);
+        fetchWeeklyData(weekStart);
       }
     } catch (error) {
       alert("建立表格失敗，請確認您的帳號權限（需要 pm_user 或以上角色）");
@@ -105,7 +148,7 @@ export default function PMWeeklyReport() {
         getRequestConfig()
       );
       if (response.data && response.data.status === 0) {
-        fetchWeeklyData(currentWeek);
+        fetchWeeklyData(weekStart);
       }
     } catch (error) {
       alert("儲存失敗，請確認您只能修改自己的表格");
@@ -113,36 +156,62 @@ export default function PMWeeklyReport() {
   };
 
   const handleDeleteTable = async (tableId: number) => {
-    if (!window.confirm("確定要刪除這整張表格嗎？資料將從資料庫中永久抹除。")) return;
+    if (!window.confirm("確定要刪除這整張表格嗎？資料將從資料庫中永久抹除。"))
+      return;
     try {
-      const response = await axios.delete(`/api/pm/tables/${tableId}`, getRequestConfig());
+      const response = await axios.delete(
+        `/api/pm/tables/${tableId}`,
+        getRequestConfig()
+      );
       if (response.data && response.data.status === 0) {
-        fetchWeeklyData(currentWeek);
+        fetchWeeklyData(weekStart);
       }
     } catch (error) {
       alert("刪除失敗");
     }
   };
 
-  const handleUpdateTableNameInState = (userId: number, tableId: number, newName: string) => {
+  const handleUpdateTableNameInState = (
+    userId: number,
+    tableId: number,
+    newName: string
+  ) => {
     setBlocks((prev) =>
       prev.map((b) =>
         b.user_id === userId
-          ? { ...b, tables: b.tables.map((t) => (t.id === tableId ? { ...t, table_name: newName } : t)) }
+          ? {
+              ...b,
+              tables: b.tables.map((t) =>
+                t.id === tableId ? { ...t, table_name: newName } : t
+              ),
+            }
           : b
       )
     );
   };
 
-  const handleUpdateTableDataInState = (userId: number, tableId: number, newData: TableData) => {
+  const handleUpdateTableDataInState = (
+    userId: number,
+    tableId: number,
+    newData: TableData
+  ) => {
     setBlocks((prev) =>
       prev.map((b) =>
         b.user_id === userId
-          ? { ...b, tables: b.tables.map((t) => (t.id === tableId ? { ...t, table_data: newData } : t)) }
+          ? {
+              ...b,
+              tables: b.tables.map((t) =>
+                t.id === tableId ? { ...t, table_data: newData } : t
+              ),
+            }
           : b
       )
     );
   };
+
+  // 判斷是否為本週
+  const isThisWeek =
+    toISODate(currentMonday) === toISODate(getMondayOf(new Date()));
 
   return (
     <div className="p-6 bg-slate-50 min-h-screen space-y-6">
@@ -154,17 +223,43 @@ export default function PMWeeklyReport() {
             每位 PM 擁有獨立填寫區塊，僅能編輯自己的表格
           </p>
         </div>
+
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-600">選擇當週（週一）：</span>
-            <input
-              type="date"
-              className="border border-slate-200 p-2 rounded-lg text-slate-700 text-sm focus:outline-blue-500"
-              value={currentWeek}
-              onChange={(e) => setCurrentWeek(e.target.value)}
-            />
+          {/* 週次導覽 */}
+          <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
+            <button
+              onClick={handlePrevWeek}
+              className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-white hover:shadow-sm transition text-slate-600"
+              title="上一週"
+            >
+              <ChevronLeft size={18} />
+            </button>
+
+            <div className="flex items-center gap-2 px-3 py-1.5 min-w-[220px] justify-center">
+              <span className="text-sm font-semibold text-slate-700 whitespace-nowrap">
+                {weekRangeLabel}
+              </span>
+            </div>
+
+            <button
+              onClick={handleNextWeek}
+              className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-white hover:shadow-sm transition text-slate-600"
+              title="下一週"
+            >
+              <ChevronRight size={18} />
+            </button>
           </div>
-          {/* 只有有權限的使用者才看到此按鈕，且已有自己的區塊時顯示「新增表格」 */}
+
+          {/* 回到本週按鈕（非本週才顯示） */}
+          {!isThisWeek && (
+            <button
+              onClick={handleThisWeek}
+              className="text-sm font-medium text-blue-600 hover:text-blue-800 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50 transition"
+            >
+              回到本週
+            </button>
+          )}
+
           {canCreate && (
             <button
               onClick={handleCreateNewTable}
@@ -220,7 +315,6 @@ export default function PMWeeklyReport() {
                     </span>
                   )}
                 </div>
-                {/* 在自己的區塊內也可以新增表格 */}
                 {block.is_current_user && canCreate && (
                   <button
                     onClick={handleCreateNewTable}
@@ -241,8 +335,10 @@ export default function PMWeeklyReport() {
                 </p>
               ) : (
                 block.tables?.map((table) => {
-                  const { headers, rows } = table.table_data || { headers: [], rows: [] };
-                  // 只有自己的區塊才能編輯
+                  const { headers, rows } = table.table_data || {
+                    headers: [],
+                    rows: [],
+                  };
                   const isEditable = block.is_current_user;
 
                   return (
@@ -255,26 +351,38 @@ export default function PMWeeklyReport() {
                         <input
                           type="text"
                           className={`text-md font-semibold border-b pb-0.5 focus:outline-none focus:border-blue-500 text-slate-700 ${
-                            !isEditable ? "bg-transparent border-none cursor-default" : ""
+                            !isEditable
+                              ? "bg-transparent border-none cursor-default"
+                              : ""
                           }`}
                           value={table.table_name}
                           onChange={(e) =>
-                            handleUpdateTableNameInState(block.user_id, table.id, e.target.value)
+                            handleUpdateTableNameInState(
+                              block.user_id,
+                              table.id,
+                              e.target.value
+                            )
                           }
                           disabled={!isEditable}
                           readOnly={!isEditable}
                         />
 
-                        {/* 操作按鈕：僅自己的表格可見 */}
                         {isEditable && (
                           <div className="flex items-center space-x-1.5 flex-wrap gap-1">
                             <button
                               onClick={() => {
                                 const newCol = `欄位 ${headers.length + 1}`;
-                                handleUpdateTableDataInState(block.user_id, table.id, {
-                                  headers: [...headers, newCol],
-                                  rows: rows.map((r) => ({ ...r, [newCol]: "" })),
-                                });
+                                handleUpdateTableDataInState(
+                                  block.user_id,
+                                  table.id,
+                                  {
+                                    headers: [...headers, newCol],
+                                    rows: rows.map((r) => ({
+                                      ...r,
+                                      [newCol]: "",
+                                    })),
+                                  }
+                                );
                               }}
                               className="text-xs bg-slate-50 hover:bg-slate-100 border text-slate-600 px-2 py-1.5 rounded-lg"
                             >
@@ -282,13 +390,20 @@ export default function PMWeeklyReport() {
                             </button>
                             <button
                               onClick={() => {
-                                handleUpdateTableDataInState(block.user_id, table.id, {
-                                  headers,
-                                  rows: [
-                                    ...rows,
-                                    headers.reduce((acc, h) => ({ ...acc, [h]: "" }), {}),
-                                  ],
-                                });
+                                handleUpdateTableDataInState(
+                                  block.user_id,
+                                  table.id,
+                                  {
+                                    headers,
+                                    rows: [
+                                      ...rows,
+                                      headers.reduce(
+                                        (acc, h) => ({ ...acc, [h]: "" }),
+                                        {}
+                                      ),
+                                    ],
+                                  }
+                                );
                               }}
                               className="text-xs bg-slate-50 hover:bg-slate-100 border text-slate-600 px-2 py-1.5 rounded-lg"
                             >
@@ -335,14 +450,20 @@ export default function PMWeeklyReport() {
                                           delete nr[header];
                                           return nr;
                                         });
-                                        handleUpdateTableDataInState(block.user_id, table.id, {
-                                          headers: updatedHeaders,
-                                          rows: updatedRows,
-                                        });
+                                        handleUpdateTableDataInState(
+                                          block.user_id,
+                                          table.id,
+                                          {
+                                            headers: updatedHeaders,
+                                            rows: updatedRows,
+                                          }
+                                        );
                                       }}
                                     />
                                   ) : (
-                                    <span className="block text-center font-bold">{header}</span>
+                                    <span className="block text-center font-bold">
+                                      {header}
+                                    </span>
                                   )}
                                 </th>
                               ))}
@@ -360,7 +481,10 @@ export default function PMWeeklyReport() {
                               </tr>
                             ) : (
                               rows.map((row, rIndex) => (
-                                <tr key={rIndex} className="hover:bg-slate-50/50">
+                                <tr
+                                  key={rIndex}
+                                  className="hover:bg-slate-50/50"
+                                >
                                   {headers.map((header, cIndex) => (
                                     <td
                                       key={cIndex}
@@ -377,10 +501,14 @@ export default function PMWeeklyReport() {
                                               ...updatedRows[rIndex],
                                               [header]: e.target.value,
                                             };
-                                            handleUpdateTableDataInState(block.user_id, table.id, {
-                                              headers,
-                                              rows: updatedRows,
-                                            });
+                                            handleUpdateTableDataInState(
+                                              block.user_id,
+                                              table.id,
+                                              {
+                                                headers,
+                                                rows: updatedRows,
+                                              }
+                                            );
                                           }}
                                         />
                                       ) : (

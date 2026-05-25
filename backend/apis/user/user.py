@@ -205,3 +205,32 @@ async def update_user_profile(
         group = db.query(Group).filter(Group.id == current_user.group_id).first()
 
     return {"status": 0, "data": serialize_user_profile(current_user, group)}
+
+
+@router.get("/users/list", summary="取得所有啟用使用者清單（含帳號與職位）")
+async def get_users_list(
+    user: AuthPayload = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    users = (
+        db.query(User)
+        .filter(User.is_active.is_not(False))
+        .order_by(User.id.asc())
+        .all()
+    )
+
+    result = []
+    for u in users:
+        user_role = (
+            db.query(UserRole)
+            .filter(UserRole.user_id == u.id)
+            .first()
+        )
+        result.append({
+            "id": u.id,
+            "account": u.account,
+            "name": u.name,
+            "job_title": user_role.job_title if user_role else "—",
+        })
+
+    return {"status": 0, "data": result}
