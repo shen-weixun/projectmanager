@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import PageMeta from '@/components/PageMeta'
 import useAPIErrorHandler from '@/hooks/useAPIErrorHandler'
 import { getCompanyInfoAPI, loginAPI } from '@/services/apis'
-import { saveRoleKey, saveToken } from '@/utils/auth'
+import { saveAccount, saveRoleKey, saveToken } from '@/utils/auth'
 import { showError, showSuccess } from '@/utils/toastHelper'
 
 type InputProps = {
@@ -89,6 +89,8 @@ const LoginPage = () => {
 
       const token = String(res.data?.token ?? '')
       const roleKey = String(res.data?.roleKey ?? '')
+      const account = String(res.data?.account ?? username)
+
       if (!token) {
         showError({
           message: '登入失敗，請檢查帳號或密碼',
@@ -101,6 +103,9 @@ const LoginPage = () => {
       if (roleKey) {
         saveRoleKey(roleKey, rememberMe)
       }
+      // 儲存帳號供首頁問候語使用
+      saveAccount(account, rememberMe)
+
       showSuccess({ message: '登入成功', position: 'top-center' })
       setTimeout(() => {
         navigate('/')

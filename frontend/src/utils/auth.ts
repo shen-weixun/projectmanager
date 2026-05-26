@@ -20,6 +20,22 @@ export function saveRoleKey(roleKey: string, rememberMe: boolean): void {
     }
 }
 
+// 儲存使用者帳號
+export function saveAccount(account: string, rememberMe: boolean): void {
+    if (rememberMe) {
+        localStorage.setItem('account', account);
+        sessionStorage.removeItem('account');
+    } else {
+        sessionStorage.setItem('account', account);
+        localStorage.removeItem('account');
+    }
+}
+
+// 取得使用者帳號
+export function getAccount(): string {
+    return localStorage.getItem('account') || sessionStorage.getItem('account') || '';
+}
+
 // 取得使用者角色
 export function getRoleKey(): string | null {
     const token = getToken();
@@ -48,6 +64,8 @@ export function removeToken(): void {
     sessionStorage.removeItem('token');
     localStorage.removeItem('roleKey');
     sessionStorage.removeItem('roleKey');
+    localStorage.removeItem('account');
+    sessionStorage.removeItem('account');
 }
 
 // 檢查是否有Token
