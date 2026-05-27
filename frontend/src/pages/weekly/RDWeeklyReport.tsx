@@ -1,7 +1,10 @@
 import React, { useCallback, useState, useEffect } from "react";
 import axios from "axios";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import AutoSaveIndicator from "@/components/AutoSaveIndicator";
+import { useAutoSaveTable } from "@/hooks/useAutoSaveTable";
 import { getToken, getRoleKey } from "@/utils/auth";
+import { formatLocalISODate } from "@/utils/localDate";
 
 interface TableData {
   headers: string[];
@@ -12,6 +15,7 @@ interface CustomTable {
   id: number;
   table_name: string;
   table_data: TableData;
+  read_only?: boolean;
 }
 
 interface UserBlock {
@@ -40,9 +44,6 @@ const getMondayOf = (date: Date): Date => {
   return d;
 };
 
-// 格式化為 YYYY-MM-DD（給 API 用）
-const toISODate = (d: Date) => d.toISOString().split("T")[0];
-
 // 格式化為 YYYY/MM/DD（顯示用）
 const formatDisplay = (d: Date) =>
   `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(
@@ -66,7 +67,7 @@ export default function RDWeeklyReport() {
   currentSunday.setDate(currentMonday.getDate() + 6);
 
   // 傳給 API 的字串
-  const weekStart = toISODate(currentMonday);
+  const weekStart = formatLocalISODate(currentMonday);
 
   // 顯示用的週次範圍字串
   const weekRangeLabel = `${formatDisplay(currentMonday)} ~ ${formatDisplay(currentSunday)}`;
@@ -156,22 +157,28 @@ export default function RDWeeklyReport() {
     }
   };
 
-  const handleSaveTableToBackend = async (table: CustomTable) => {
-    try {
-      const response = await axios.patch(
-        `/api/rd/tables/${table.id}`,
-        { table_name: table.table_name, table_data: table.table_data },
-        getRequestConfig()
-      );
-      if (response.data && response.data.status === 0) {
-        fetchWeeklyData(weekStart);
+  const saveTableToBackend = useCallback(
+    async (table: CustomTable) => {
+      try {
+        const response = await axios.patch(
+          `/api/rd/tables/${table.id}`,
+          { table_name: table.table_name, table_data: table.table_data },
+          getRequestConfig()
+        );
+        if (response.data?.status === 0) return true;
+        throw new Error(response.data?.message || "儲存失敗");
+      } catch (error) {
+        throw error;
       }
-    } catch {
-      alert("儲存失敗，請確認您只能修改自己的表格");
-    }
-  };
+    },
+    [getRequestConfig]
+  );
+
+  const { scheduleSave, cancelSave, statusByTableId, errorByTableId } =
+    useAutoSaveTable(saveTableToBackend);
 
   const handleDeleteTable = async (tableId: number) => {
+    cancelSave(tableId);
     if (!window.confirm("確定要刪除這整張表格嗎？資料將從資料庫中永久抹除。"))
       return;
     try {
@@ -192,8 +199,8 @@ export default function RDWeeklyReport() {
     tableId: number,
     newName: string
   ) => {
-    setBlocks((prev) =>
-      prev.map((b) =>
+    setBlocks((prev) => {
+      const next = prev.map((b) =>
         b.user_id === userId
           ? {
               ...b,
@@ -202,8 +209,17 @@ export default function RDWeeklyReport() {
               ),
             }
           : b
+      );
+      const block = next.find((b) => b.user_id === userId);
+      const table = block?.tables.find((t) => t.id === tableId);
+      if (
+        block?.is_current_user &&
+        table &&
+        (isThisWeek || !table.read_only)
       )
-    );
+        scheduleSave(table);
+      return next;
+    });
   };
 
   const handleUpdateTableDataInState = (
@@ -211,8 +227,8 @@ export default function RDWeeklyReport() {
     tableId: number,
     newData: TableData
   ) => {
-    setBlocks((prev) =>
-      prev.map((b) =>
+    setBlocks((prev) => {
+      const next = prev.map((b) =>
         b.user_id === userId
           ? {
               ...b,
@@ -221,13 +237,23 @@ export default function RDWeeklyReport() {
               ),
             }
           : b
+      );
+      const block = next.find((b) => b.user_id === userId);
+      const table = block?.tables.find((t) => t.id === tableId);
+      if (
+        block?.is_current_user &&
+        table &&
+        (isThisWeek || !table.read_only)
       )
-    );
+        scheduleSave(table);
+      return next;
+    });
   };
 
   // 判斷是否為本週
   const isThisWeek =
-    toISODate(currentMonday) === toISODate(getMondayOf(new Date()));
+    formatLocalISODate(currentMonday) ===
+    formatLocalISODate(getMondayOf(new Date()));
 
   return (
     <div className="p-6 bg-slate-50 min-h-screen space-y-6">
@@ -236,7 +262,7 @@ export default function RDWeeklyReport() {
         <div>
           <h1 className="text-2xl font-bold text-slate-800">RD 週報工作表</h1>
           <p className="text-sm text-slate-400 mt-1">
-            每位 RD 擁有獨立填寫區塊，僅能編輯自己的表格
+            每位 RD 擁有獨立填寫區塊，僅能編輯自己的表格；編輯後自動儲存，登出後過往週次已填寫紀錄將鎖定（本週不受影響）
           </p>
         </div>
 
@@ -355,7 +381,12 @@ export default function RDWeeklyReport() {
                     headers: [],
                     rows: [],
                   };
-                  const isEditable = block.is_current_user;
+                  const tableReadOnly =
+                    Boolean(table.read_only) && !isThisWeek;
+                  const isEditable =
+                    block.is_current_user &&
+                    canCreate &&
+                    (isThisWeek || !table.read_only);
 
                   return (
                     <div
@@ -364,46 +395,40 @@ export default function RDWeeklyReport() {
                     >
                       {/* 表格標題列 */}
                       <div className="flex justify-between items-center flex-wrap gap-2">
-                        <input
-                          type="text"
-                          className={`text-md font-semibold border-b pb-0.5 focus:outline-none focus:border-blue-500 text-slate-700 ${
-                            !isEditable
-                              ? "bg-transparent border-none cursor-default"
-                              : ""
-                          }`}
-                          value={table.table_name}
-                          onChange={(e) =>
-                            handleUpdateTableNameInState(
-                              block.user_id,
-                              table.id,
-                              e.target.value
-                            )
-                          }
-                          disabled={!isEditable}
-                          readOnly={!isEditable}
-                        />
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {tableReadOnly && block.is_current_user && (
+                            <span className="text-xs bg-amber-50 text-amber-700 px-2.5 py-1 rounded-full font-medium">
+                              已鎖定 · 僅供查閱
+                            </span>
+                          )}
+                          <input
+                            type="text"
+                            className={`text-md font-semibold border-b pb-0.5 focus:outline-none focus:border-blue-500 text-slate-700 ${
+                              !isEditable
+                                ? "bg-transparent border-none cursor-default"
+                                : ""
+                            }`}
+                            value={table.table_name}
+                            onChange={(e) =>
+                              handleUpdateTableNameInState(
+                                block.user_id,
+                                table.id,
+                                e.target.value
+                              )
+                            }
+                            disabled={!isEditable}
+                            readOnly={!isEditable}
+                          />
+                          {isEditable && (
+                            <AutoSaveIndicator
+                              status={statusByTableId[table.id]}
+                              errorMessage={errorByTableId[table.id]}
+                            />
+                          )}
+                        </div>
 
                         {isEditable && (
                           <div className="flex items-center space-x-1.5 flex-wrap gap-1">
-                            <button
-                              onClick={() => {
-                                const newCol = `欄位 ${headers.length + 1}`;
-                                handleUpdateTableDataInState(
-                                  block.user_id,
-                                  table.id,
-                                  {
-                                    headers: [...headers, newCol],
-                                    rows: rows.map((r) => ({
-                                      ...r,
-                                      [newCol]: "",
-                                    })),
-                                  }
-                                );
-                              }}
-                              className="text-xs bg-slate-50 hover:bg-slate-100 border text-slate-600 px-2 py-1.5 rounded-lg"
-                            >
-                              ➕ 新增欄位
-                            </button>
                             <button
                               onClick={() => {
                                 handleUpdateTableDataInState(
@@ -421,19 +446,13 @@ export default function RDWeeklyReport() {
                                   }
                                 );
                               }}
-                              className="text-xs bg-slate-50 hover:bg-slate-100 border text-slate-600 px-2 py-1.5 rounded-lg"
+                              className="text-sm font-medium bg-slate-50 hover:bg-slate-100 border text-slate-600 px-3 py-2 rounded-lg"
                             >
                               ➕ 新增資料列
                             </button>
                             <button
-                              onClick={() => handleSaveTableToBackend(table)}
-                              className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded-lg font-medium shadow-xs"
-                            >
-                              💾 儲存此表
-                            </button>
-                            <button
                               onClick={() => handleDeleteTable(table.id)}
-                              className="text-xs bg-red-50 hover:bg-red-100 text-red-600 px-2 py-1.5 rounded-lg"
+                              className="text-sm font-medium bg-red-50 hover:bg-red-100 text-red-600 px-3 py-2 rounded-lg"
                             >
                               🗑️ 刪除
                             </button>
@@ -449,38 +468,9 @@ export default function RDWeeklyReport() {
                               {headers.map((header, hIndex) => (
                                 <th
                                   key={hIndex}
-                                  className="border border-slate-200 p-2.5 min-w-[140px]"
+                                  className="border border-slate-200 p-2.5 min-w-[140px] text-center font-bold"
                                 >
-                                  {isEditable ? (
-                                    <input
-                                      type="text"
-                                      className="w-full bg-transparent border-none font-bold text-slate-700 text-center focus:bg-white focus:outline-none"
-                                      value={header}
-                                      onChange={(e) => {
-                                        const nextValue = e.target.value;
-                                        const updatedHeaders = [...headers];
-                                        updatedHeaders[hIndex] = nextValue;
-                                        const updatedRows = rows.map((r) => {
-                                          const nr = { ...r };
-                                          nr[nextValue] = nr[header];
-                                          delete nr[header];
-                                          return nr;
-                                        });
-                                        handleUpdateTableDataInState(
-                                          block.user_id,
-                                          table.id,
-                                          {
-                                            headers: updatedHeaders,
-                                            rows: updatedRows,
-                                          }
-                                        );
-                                      }}
-                                    />
-                                  ) : (
-                                    <span className="block text-center font-bold">
-                                      {header}
-                                    </span>
-                                  )}
+                                  {header}
                                 </th>
                               ))}
                             </tr>

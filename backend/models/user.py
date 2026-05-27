@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy import Boolean, Float, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column,relationship
 
 from .base import Base, TimestampMixin
@@ -22,6 +22,9 @@ class User(Base, TimestampMixin):
     address: Mapped[str | None] = mapped_column(
         String(255), nullable=True, comment="address"
     )
+    font_scale: Mapped[float] = mapped_column(
+        Float, nullable=False, default=1.0, server_default="1.0", comment="UI font scale"
+    )
     token_version: Mapped[int] = mapped_column(
         nullable=False, default=0, comment="JWT token version"
     )
@@ -39,3 +42,5 @@ class User(Base, TimestampMixin):
    )
     pm_weekly_tables = relationship("PMWeeklyReportTable", back_populates="creator", cascade="all, delete-orphan")
     rd_weekly_tables = relationship("RDWeeklyReportTable", back_populates="creator", cascade="all, delete-orphan")
+    daily_work_records = relationship("DailyWorkRecordTable", back_populates="creator", cascade="all, delete-orphan")
+    weekly_work_records = relationship("WeeklyWorkRecordTable", back_populates="creator", cascade="all, delete-orphan")

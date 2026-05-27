@@ -42,6 +42,21 @@ pip install -r requirements.txt
 poetry install
 ```
 
+## 🗄️ 資料庫 Migration（Anaconda）
+
+若使用 Conda 環境 `projectmanager`，請在 `backend` 目錄執行：
+
+```bash
+conda activate projectmanager
+python -m alembic upgrade head
+```
+
+或使用：
+
+```bash
+conda run -n projectmanager python -m alembic upgrade head
+```
+
 ## 🗄️ 資料庫初始化
 
 初始化 Alembic 設定

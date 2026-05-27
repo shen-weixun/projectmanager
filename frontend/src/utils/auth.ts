@@ -52,6 +52,9 @@ export function getRoleKey(): string | null {
 
 export const PM_ROLE_KEYS = ['super', 'boss', 'pm_leader', 'pm_user'] as const;
 export const RD_ROLE_KEYS = ['super', 'boss', 'rd_leader', 'rd_user'] as const;
+export const WORK_REPORT_MANAGER_ROLES = ['super', 'boss'] as const;
+export const LEAD_MANAGEMENT_ROLE_KEYS = ['super', 'boss', 'pm_leader', 'pm_user'] as const;
+export const LEAD_MANAGEMENT_MANAGER_ROLES = ['super', 'boss'] as const;
 
 // 取得Token
 export function getToken(): string | null {

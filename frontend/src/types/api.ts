@@ -5,6 +5,7 @@ export interface LoginResponse {
     roleKey?: string;
     account?: string;
     name?: string;
+    fontScale?: number;
     message?: string;
 }
 
@@ -29,6 +30,7 @@ export interface UserProfile {
     groupName: string;
     email: string;
     address: string;
+    fontScale: number;
 }
 
 export interface UserProfileUpdatePayload {
@@ -36,6 +38,7 @@ export interface UserProfileUpdatePayload {
     groupName: string;
     email: string;
     address: string;
+    fontScale: number;
 }
 
 // 專案列表與甘特圖使用的專案基本資料。
@@ -195,6 +198,57 @@ export interface ProjectOptions {
     todoStatuses?: string[];
     scheduleStatuses?: string[];
     checkpointStatuses?: string[];
+}
+
+export type LeadFieldType = 'text' | 'select' | 'cascade_select' | 'date' | 'textarea';
+
+export type LeadOptionColor = 'slate' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'rose';
+
+export interface LeadFieldOption {
+    value: string;
+    color: LeadOptionColor;
+    children?: LeadFieldOption[];
+}
+
+export interface LeadField {
+    id: number;
+    label: string;
+    fieldType: LeadFieldType;
+    options: LeadFieldOption[];
+    sortOrder: number;
+    isRequired: boolean;
+    isManagerOnly: boolean;
+    isRepeatable: boolean;
+    isActive: boolean;
+}
+
+export interface LeadFieldPayload {
+    label: string;
+    fieldType: LeadFieldType;
+    options: LeadFieldOption[];
+    sortOrder?: number;
+    isRequired: boolean;
+    isManagerOnly: boolean;
+    isRepeatable: boolean;
+    isActive: boolean;
+}
+
+export interface LeadCase {
+    id: number;
+    data: Record<string, string | string[]>;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+}
+
+export interface LeadCasePayload {
+    data: Record<string, string | string[]>;
+}
+
+export interface UserListItem {
+    id: number;
+    account: string;
+    name: string;
+    job_title?: string;
 }
 
 // 財產清單項目，包含數量、保管人、位置與最後取出資訊。

@@ -1,0 +1,13 @@
+2026-05-27 13:36:08,861 - apis - INFO - ✅ Router loaded: router (prefix=/api/asset-inventory) from apis.asset.asset
+2026-05-27 13:36:08,899 - apis - INFO - ✅ Router loaded: router (prefix=/api/company) from apis.company.company
+2026-05-27 13:36:08,925 - apis - INFO - ✅ Router loaded: router (prefix=/api/lead-management) from apis.lead_management.lead_management
+2026-05-27 13:36:08,986 - apis - INFO - ✅ Router loaded: router (prefix=/api/project) from apis.project.options
+2026-05-27 13:36:09,019 - apis - INFO - ✅ Router loaded: router (prefix=/api/project) from apis.project.project
+2026-05-27 13:36:09,061 - apis - INFO - ✅ Router loaded: router (prefix=/api/project) from apis.project.resources
+2026-05-27 13:36:09,126 - apis - INFO - ✅ Router loaded: router (prefix=/api) from apis.user.user
+2026-05-27 13:36:09,150 - apis - INFO - ✅ Router loaded: router (prefix=/api/pm) from apis.weekly.pm
+2026-05-27 13:36:09,173 - apis - INFO - ✅ Router loaded: router (prefix=/api/rd) from apis.weekly.rd
+2026-05-27 13:36:09,214 - apis - INFO - ✅ Router loaded: router (prefix=/api/work-report/daily) from apis.work_report.daily
+2026-05-27 13:36:09,232 - apis - INFO - ✅ Router loaded: router (prefix=/api/work-report) from apis.work_report.options
+2026-05-27 13:36:09,247 - apis - INFO - ✅ Router loaded: router (prefix=/api/work-report) from apis.work_report.schema
+2026-05-27 13:36:09,272 - apis - INFO - ✅ Router loaded: router (prefix=/api/work-report/weekly) from apis.work_report.weekly

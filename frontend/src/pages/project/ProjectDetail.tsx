@@ -384,7 +384,7 @@ const ProjectDetailPage = () => {
   }
 
   return (
-    <div className="mx-auto min-h-screen w-full max-w-[1400px] bg-slate-100 pb-16">
+    <div className="mx-auto min-h-screen w-full max-w-none bg-slate-100 pb-16">
       <div className="sticky top-0 z-20 mb-8 flex items-center justify-between border-b border-slate-300 bg-white/95 px-8 py-5 shadow-sm backdrop-blur-md">
         <div>
           <h2 className="text-3xl font-extrabold text-slate-900">{form.name || "專案詳情"}</h2>

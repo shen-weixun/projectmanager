@@ -184,7 +184,7 @@ const DepartmentSetting = () => {
             {/* Mobile view */}
             <div className="block md:hidden space-y-4">
                 {departments.map((dept) => (
-                    <div className="bg-white p-4 rounded-lg shadow space-y-2">
+                    <div key={dept.id} className="bg-white p-4 rounded-lg shadow space-y-2">
                         <div className="text-lg font-semibold">{dept.name}</div>
                         <div className="text-sm text-gray-700">📝 {dept.description}</div>
                         <div className="text-sm text-gray-600">
@@ -420,7 +420,7 @@ const GroupEditorModal = ({
                 <ul className="space-y-2 max-h-40 overflow-y-auto">
                     {groupList.map((group, index) => (
                         <li
-                            key={index}
+                            key={group.id}
                             className="flex justify-between items-center border px-3 py-2 rounded"
                         >
                             <span>{group.name}</span>

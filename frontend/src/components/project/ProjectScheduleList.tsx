@@ -378,7 +378,7 @@ const ProjectScheduleList = ({
           </table>
         </div>
 
-        <div className="mt-4">
+        <div className="mt-4 w-full">
           {ganttTasks.length > 0 ? (
             <GanttChart tasks={ganttTasks} variant="schedule" />
           ) : (

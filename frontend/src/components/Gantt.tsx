@@ -1,6 +1,13 @@
-import React, { useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ViewMode, Gantt } from 'gantt-task-react'
 import 'gantt-task-react/dist/index.css'
+import {
+  estimateGanttDateCount,
+  getGanttDayLabelStep,
+  getGanttTimelineDates,
+  getGanttViewDate,
+  shouldShowGanttDayLabel,
+} from '@/utils/ganttTimeline'
 
 type CustomField = {
   label: string
@@ -62,12 +69,23 @@ type TooltipTask = {
   customFields?: CustomField[]
 }
 
+const MIN_COLUMN_WIDTH = 32
+const MAX_COLUMN_WIDTH = 80
+const GANTT_CALENDAR_BOTTOM_TEXT_SELECTOR = 'text._9w8d5'
+
 const formatDate = (date: Date) =>
   new Intl.DateTimeFormat('zh-TW', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   }).format(date)
+
+const formatGanttAxisDayLabel = (date: Date, step: number) => {
+  if (step > 1 && date.getDate() === 1) {
+    return `${date.getMonth() + 1}/${date.getDate()}`
+  }
+  return String(date.getDate())
+}
 
 const getVisibleCustomFields = (customFields?: CustomField[]) =>
   (customFields ?? []).filter((field) => field.label.trim())
@@ -267,11 +285,13 @@ const TaskListTable = ({
 
 const GanttChart = ({ tasks, variant = 'project' }: Props) => {
   const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.Day)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const [containerWidth, setContainerWidth] = useState(0)
   const isDayView = viewMode === ViewMode.Day
   const taskListColumns = useMemo(() => getTaskListColumns(tasks, variant), [tasks, variant])
   const ganttKey = useMemo(
     () =>
-      tasks
+      `${viewMode}::${tasks
         .map((task) =>
           [
             task.id,
@@ -283,8 +303,8 @@ const GanttChart = ({ tasks, variant = 'project' }: Props) => {
             ),
           ].join('|')
         )
-        .join('::'),
-    [tasks]
+        .join('::')}`,
+    [tasks, viewMode]
   )
   const listCellWidth = useMemo(() => {
     const width =
@@ -297,52 +317,129 @@ const GanttChart = ({ tasks, variant = 'project' }: Props) => {
     return `${width}px`
   }, [taskListColumns.length])
 
+  const listWidthPx = useMemo(() => parseInt(listCellWidth, 10) || 760, [listCellWidth])
+
+  const dateCount = useMemo(
+    () => estimateGanttDateCount(tasks, viewMode),
+    [tasks, viewMode]
+  )
+
+  const columnWidth = useMemo(() => {
+    const chartWidth = Math.max(containerWidth - listWidthPx - 16, 320)
+    const fitted = Math.floor(chartWidth / Math.max(dateCount, 1))
+    return Math.max(MIN_COLUMN_WIDTH, Math.min(MAX_COLUMN_WIDTH, fitted))
+  }, [containerWidth, dateCount, listWidthPx])
+
+  const viewDate = useMemo(() => getGanttViewDate(tasks), [tasks])
+
+  const ganttHeight = useMemo(
+    () => Math.max(tasks.length * 42 + 60, 280),
+    [tasks.length]
+  )
+
+  useEffect(() => {
+    const element = wrapperRef.current
+    if (!element) return
+
+    const updateWidth = () => {
+      setContainerWidth(element.clientWidth)
+    }
+
+    updateWidth()
+    const observer = new ResizeObserver(updateWidth)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (viewMode !== ViewMode.Day) return
+
+    const root = wrapperRef.current?.querySelector('.gantt-readable')
+    if (!root) return
+
+    const timelineDates = getGanttTimelineDates(tasks, viewMode)
+    const labelStep = getGanttDayLabelStep(columnWidth)
+
+    const rewriteDayAxisLabels = () => {
+      root.querySelectorAll<SVGTextElement>(GANTT_CALENDAR_BOTTOM_TEXT_SELECTOR).forEach((node, index) => {
+        const date = timelineDates[index]
+        if (!date) return
+
+        const label = shouldShowGanttDayLabel(date, labelStep)
+          ? formatGanttAxisDayLabel(date, labelStep)
+          : ''
+
+        if (node.textContent !== label) {
+          node.textContent = label
+        }
+      })
+    }
+
+    rewriteDayAxisLabels()
+    const observer = new MutationObserver(rewriteDayAxisLabels)
+    observer.observe(root, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [ganttKey, tasks, viewMode, columnWidth])
+
   const viewModeOptions = [
     { label: '日', value: ViewMode.Day },
     { label: '週', value: ViewMode.Week },
     { label: '月', value: ViewMode.Month },
   ]
 
-  const CustomTaskListHeader = React.useCallback(
-    (props: any) => <TaskListHeader {...props} columns={taskListColumns} variant={variant} />,
+  const CustomTaskListHeader = useCallback(
+    (props: TaskListHeaderProps) => <TaskListHeader {...props} columns={taskListColumns} variant={variant} />,
     [taskListColumns, variant]
   )
 
-  const CustomTaskListTable = React.useCallback(
-    (props: any) => <TaskListTable {...props} columns={taskListColumns} variant={variant} />,
+  const CustomTaskListTable = useCallback(
+    (props: TaskListTableProps) => <TaskListTable {...props} columns={taskListColumns} variant={variant} />,
     [taskListColumns, variant]
   )
 
-  const CustomTooltipContent = React.useCallback(
-    (props: any) => <CustomTooltip {...props} variant={variant} />,
+  const CustomTooltipContent = useCallback(
+    (props: { task: TooltipTask }) => <CustomTooltip {...props} variant={variant} />,
     [variant]
   )
 
   return (
-    <div className="relative z-30 overflow-visible rounded-md border border-gray-200 bg-gray-50 p-2">
-      <div className="mb-3 flex flex-wrap gap-2">
-        {viewModeOptions.map((option) => (
-          <button
-            key={option.label}
-            type="button"
-            className={`rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors ${viewMode === option.value
-              ? 'border-slate-800 bg-slate-800 text-white'
-              : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-              }`}
-            onClick={() => setViewMode(option.value)}
-          >
-            {option.label}
-          </button>
-        ))}
+    <div
+      ref={wrapperRef}
+      className="gantt-viewport-shell relative z-30 w-full overflow-x-auto rounded-md border border-gray-200 bg-gray-50 p-2"
+    >
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
+          {viewModeOptions.map((option) => (
+            <button
+              key={option.label}
+              type="button"
+              className={`rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors ${viewMode === option.value
+                ? 'border-slate-800 bg-slate-800 text-white'
+                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              onClick={() => setViewMode(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs font-medium text-slate-500">
+          拖曳下方時間軸可瀏覽完整區間；切換日／週／月檢視
+        </p>
       </div>
-      <div className="gantt-readable relative z-30 overflow-visible pb-24 pt-6">
+      <div
+        className="gantt-readable relative z-30 min-w-full overflow-x-auto overflow-y-visible pb-6 pt-2"
+        style={{ minWidth: `${listWidthPx + dateCount * columnWidth}px` }}
+      >
         <Gantt
           key={ganttKey}
           tasks={tasks}
           viewMode={viewMode}
+          viewDate={viewDate}
           locale="zh-TW"
           listCellWidth={listCellWidth}
-          columnWidth={isDayView ? 72 : 58}
+          columnWidth={columnWidth}
+          ganttHeight={ganttHeight}
           rowHeight={42}
           barCornerRadius={2}
           barFill={70}

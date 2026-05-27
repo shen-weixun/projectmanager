@@ -19,8 +19,13 @@ import {
   CheckSquare,
   ArrowRight,
 } from 'lucide-react'
-import { getProjectDetailAPI, getProjectsAPI } from '@/services/apis'
-import { getRoleKey } from '@/utils/auth'
+import {
+  fetchAllProjects,
+  getProjectDetailAPI,
+  getProjectTodoAPI,
+  getProjectsAPI,
+} from '@/services/apis'
+import { getAccount, getRoleKey } from '@/utils/auth'
 import type { Project, ProjectDetail } from '@/types/api'
 
 // ── 型別定義 ──────────────────────────────────────────────
@@ -190,7 +195,16 @@ const COMPLETED_STATUSES = ['已完成', '已結案', '完成', '結案']
 const isCompletedStatus = (status?: string) =>
   COMPLETED_STATUSES.some((s) => status?.includes(s))
 
+const isActiveProjectStatus = (status?: string) => status?.trim() === '進行中'
+
 const normalizePointKey = (value?: string) => value?.trim().toLowerCase() ?? ''
+
+const isResponsibleProject = (project: Project, account: string) => {
+  const userKey = normalizePointKey(account)
+  if (!userKey) return false
+  const ownerKey = normalizePointKey(project.projectOwner || project.owner)
+  return ownerKey === userKey
+}
 
 const addPoints = (scores: Record<string, number>, assignee: string | undefined, points: number) => {
   const key = normalizePointKey(assignee)
@@ -221,17 +235,6 @@ const calculateProjectPointScores = (projectDetails: ProjectDetail[]) => {
     })
   })
   return scores
-}
-
-const getStoredUserAccount = () => {
-  const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-  if (!token) return ''
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1])) as Record<string, unknown>
-    return String(payload.account ?? payload.username ?? payload.name ?? '')
-  } catch {
-    return ''
-  }
 }
 
 // ── 問候語（依時段）────────────────────────────────────────
@@ -619,106 +622,100 @@ const HomePage = () => {
       .finally(() => setMembersLoading(false))
   }, [])
 
-  useEffect(() => {
-    getProjectsAPI({ pageSize: 100 }).then(async (res) => {
-      if (res.status !== 0) return
-      setAllProjects(res.data.items)
-      const details = await Promise.all(
-        res.data.items.map((project) => getProjectDetailAPI(project.id))
-      )
-      setMemberPointScores(
-        calculateProjectPointScores(
-          details.filter((detail) => detail.status === 0).map((detail) => detail.data)
-        )
-      )
-    })
-  }, [])
-
-  // ── 🆕 歡迎欄：待辦事項 & 執行中專案 ────────────────────
-  const currentUserAccount = getStoredUserAccount()
+  // ── 待辦事項與執行中專案（頁面載入時自動取得）────────────
+  const currentUserAccount = getAccount()
   const [todoModalOpen, setTodoModalOpen] = useState(false)
   const [activeProjectsModalOpen, setActiveProjectsModalOpen] = useState(false)
 
-  // 待辦事項（從所有專案的 todoItems 中撈出未完成的）
   const [pendingTodos, setPendingTodos] = useState<TodoItem[]>([])
-  const [todosLoading, setTodosLoading] = useState(false)
-  const [todosLoaded, setTodosLoaded] = useState(false)
+  const [todosLoading, setTodosLoading] = useState(true)
 
-  // 執行中專案
   const [activeProjects, setActiveProjects] = useState<Project[]>([])
-  const [activeProjectsLoading, setActiveProjectsLoading] = useState(false)
-  const [activeProjectsLoaded, setActiveProjectsLoaded] = useState(false)
+  const [activeProjectsLoading, setActiveProjectsLoading] = useState(true)
 
-  // 載入待辦（lazy：只在打開 modal 時載入）
-  const loadTodos = async () => {
-    if (todosLoaded) return
-    setTodosLoading(true)
-    try {
-      const res = await getProjectsAPI({ pageSize: 200 })
-      if (res.status !== 0) return
-      const detailResults = await Promise.all(
-        res.data.items.map((p) => getProjectDetailAPI(p.id))
-      )
-      const todos: TodoItem[] = []
-      detailResults.forEach((result) => {
-        if (result.status !== 0) return
-        const detail = result.data
-        ;(detail.todoItems ?? []).forEach((item) => {
-          if (!isCompletedStatus(item.status)) {
-            todos.push({
-              id: item.id,
-              projectId: detail.id,
-              projectName: detail.name,
-              item: item.item,
-              assignee: item.assignee ?? '',
-              status: item.status ?? '尚未開始',
-              dueDate: item.dueDate ?? '',
-              note: item.note ?? '',
+  useEffect(() => {
+    let cancelled = false
+
+    const loadProjectSummaries = async () => {
+      setTodosLoading(true)
+      setActiveProjectsLoading(true)
+
+      try {
+        const res = await fetchAllProjects()
+        if (cancelled || res.status !== 0) return
+
+        const projects = res.data
+        setAllProjects(projects)
+        const responsibleProjects = projects.filter((project) =>
+          isResponsibleProject(project, currentUserAccount)
+        )
+        setActiveProjects(responsibleProjects.filter((project) => isActiveProjectStatus(project.status)))
+
+        const [todoResults, detailResults] = await Promise.all([
+          Promise.all(
+            responsibleProjects.map(async (project) => {
+              const todoRes = await getProjectTodoAPI(project.id)
+              if (todoRes.status !== 0) return [] as TodoItem[]
+
+              return (todoRes.data ?? [])
+                .filter((item) => !isCompletedStatus(item.status))
+                .map((item) => ({
+                  id: item.id,
+                  projectId: project.id,
+                  projectName: project.name,
+                  item: item.item,
+                  assignee: item.assignee ?? '',
+                  status: item.status ?? '尚未開始',
+                  dueDate: item.dueDate ?? '',
+                  note: item.note ?? '',
+                }))
             })
-          }
-        })
-      })
-      // 逾期優先排序
-      todos.sort((a, b) => {
+          ),
+          Promise.all(projects.map((project) => getProjectDetailAPI(project.id))),
+        ])
+
+        if (cancelled) return
+
+        const todos = todoResults.flat()
         const today = formatDate(new Date())
-        const aOverdue = a.dueDate && a.dueDate < today ? -1 : 0
-        const bOverdue = b.dueDate && b.dueDate < today ? -1 : 0
-        return aOverdue - bOverdue
-      })
-      setPendingTodos(todos)
-      setTodosLoaded(true)
-    } finally {
-      setTodosLoading(false)
-    }
-  }
+        todos.sort((a, b) => {
+          const aOverdue = a.dueDate && a.dueDate < today ? -1 : 0
+          const bOverdue = b.dueDate && b.dueDate < today ? -1 : 0
+          return aOverdue - bOverdue
+        })
+        setPendingTodos(todos)
 
-  // 載入執行中專案（lazy）
-  const loadActiveProjects = async () => {
-    if (activeProjectsLoaded) return
-    setActiveProjectsLoading(true)
-    try {
-      const res = await getProjectsAPI({ pageSize: 200, status: '進行中' })
-      if (res.status === 0) {
-        setActiveProjects(res.data.items)
-        setActiveProjectsLoaded(true)
+        setMemberPointScores(
+          calculateProjectPointScores(
+            detailResults.filter((detail) => detail.status === 0).map((detail) => detail.data)
+          )
+        )
+      } finally {
+        if (!cancelled) {
+          setTodosLoading(false)
+          setActiveProjectsLoading(false)
+        }
       }
-    } finally {
-      setActiveProjectsLoading(false)
     }
-  }
 
+    void loadProjectSummaries()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // 開啟 modal（資料已在背景載入，直接開啟）
   const handleOpenTodoModal = () => {
     setTodoModalOpen(true)
-    loadTodos()
   }
 
   const handleOpenActiveProjectsModal = () => {
     setActiveProjectsModalOpen(true)
-    loadActiveProjects()
   }
 
-  // 統計用（快速計算，不需要 lazy load）
-  const activeProjectCount = allProjects.filter((p) => p.status === '進行中').length
+  // 統計用（從已載入的 activeProjects 取數量）
+  const activeProjectCount = activeProjects.length
+  const allProjectsActiveCount = allProjects.filter((p) => isActiveProjectStatus(p.status)).length
 
   const docCategories = Array.from(new Set(documents.map((d) => d.category)))
 
@@ -749,14 +746,14 @@ const HomePage = () => {
   const monthlyAchievementCards = [
     { label: '送件數', value: monthlySubmittedCount, icon: Send, iconClass: 'bg-blue-50 text-blue-600', cardClass: 'bg-blue-50/50' },
     { label: '過案數', value: monthlyPassedCount, icon: CircleCheck, iconClass: 'bg-emerald-50 text-emerald-600', cardClass: 'bg-emerald-50/50' },
-    { label: '執行中專案', value: activeProjectCount, icon: BriefcaseBusiness, iconClass: 'bg-violet-50 text-violet-600', cardClass: 'bg-violet-50/50' },
+    { label: '執行中專案', value: allProjectsActiveCount, icon: BriefcaseBusiness, iconClass: 'bg-violet-50 text-violet-600', cardClass: 'bg-violet-50/50' },
     { label: '成功簽約', value: monthlySignedCount, icon: Handshake, iconClass: 'bg-orange-50 text-orange-600', cardClass: 'bg-orange-50/50' },
   ]
 
   return (
     <div className="w-full max-w-[1400px] mx-auto pb-10 space-y-6">
 
-      {/* ══ 🆕 歡迎橫幅（三欄）══════════════════════════════ */}
+      {/* ══ 歡迎橫幅（三欄）══════════════════════════════ */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-0 rounded-2xl border border-blue-100 bg-white shadow-sm overflow-hidden">
         {/* 欄 1：問候 + 日期 */}
         <div className="flex items-center gap-4 px-6 py-5 bg-gradient-to-br from-amber-50 to-yellow-50 border-b sm:border-b-0 sm:border-r border-blue-100">
@@ -777,10 +774,14 @@ const HomePage = () => {
             <ClipboardList size={22} className="text-orange-500" />
           </span>
           <div className="flex-1 min-w-0">
-            <p className="text-2xl font-bold text-gray-900 leading-none">
-              {todosLoaded ? pendingTodos.length : '—'}
-            </p>
-            <p className="text-sm text-gray-500 mt-0.5">今日待辦</p>
+            {todosLoading ? (
+              <div className="w-6 h-6 border-2 border-orange-300 border-t-transparent rounded-full animate-spin mb-1" />
+            ) : (
+              <p className="text-2xl font-bold text-gray-900 leading-none">
+                {pendingTodos.length}
+              </p>
+            )}
+            <p className="text-sm text-gray-500 mt-0.5">未完成待辦</p>
             <button
               onClick={handleOpenTodoModal}
               className="flex items-center gap-1 text-xs font-semibold text-orange-600 hover:text-orange-800 mt-1.5 transition-colors group"
@@ -797,7 +798,11 @@ const HomePage = () => {
             <BriefcaseBusiness size={22} className="text-blue-500" />
           </span>
           <div className="flex-1 min-w-0">
-            <p className="text-2xl font-bold text-gray-900 leading-none">{activeProjectCount}</p>
+            {activeProjectsLoading ? (
+              <div className="w-6 h-6 border-2 border-blue-300 border-t-transparent rounded-full animate-spin mb-1" />
+            ) : (
+              <p className="text-2xl font-bold text-gray-900 leading-none">{activeProjectCount}</p>
+            )}
             <p className="text-sm text-gray-500 mt-0.5">執行中專案</p>
             <button
               onClick={handleOpenActiveProjectsModal}

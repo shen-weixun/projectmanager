@@ -215,7 +215,7 @@ const ProjectManagementPage = () => {
   }, [ganttProjects])
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] bg-orange-50 min-h-screen pb-16">
+    <div className="mx-auto w-full max-w-none bg-orange-50 min-h-screen pb-16">
       <div className="sticky top-0 z-20 mb-8 flex items-center justify-between border-b border-slate-300 bg-white/95 px-8 py-5 backdrop-blur-md shadow-sm">
         <div>
           <h1 className="text-3xl font-extrabold text-slate-900">專案總覽</h1>
@@ -448,7 +448,7 @@ const ProjectManagementPage = () => {
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-300 bg-white p-2">
+            <div className="w-full rounded-xl border border-slate-300 bg-white p-2">
               <ErrorBoundary
                 fallback={
                   <div className="py-16 text-center text-base font-semibold text-red-500">

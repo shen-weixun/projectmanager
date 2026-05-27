@@ -9,6 +9,7 @@ from utils.auth import AuthPayload, get_current_user, select_primary_role_key
 from utils.jwt_utils import generate_token
 from utils.logger import setup_logger
 from utils.password import verify_password
+from utils.report_period import lock_user_past_tables_on_logout, unlock_current_week_tables
 
 logger = setup_logger(__name__)
 
@@ -25,6 +26,7 @@ class UserProfileUpdate(BaseModel):
     groupName: str | None = None
     email: str | None = None
     address: str | None = None
+    fontScale: float | None = Field(None, ge=0.8, le=1.5)
 
 
 def serialize_user_profile(current_user: User, group: Group | None = None) -> dict:
@@ -36,6 +38,7 @@ def serialize_user_profile(current_user: User, group: Group | None = None) -> di
         "groupName": current_user.group_name or "",
         "email": current_user.email or "",
         "address": current_user.address or "",
+        "fontScale": current_user.font_scale or 1.0,
     }
 
 
@@ -66,6 +69,9 @@ async def login(data: LoginRequest, db: Session = Depends(get_db)):
         )
         role_key = select_primary_role_key([role.role_key for role in roles])
 
+        unlock_current_week_tables(db, user_id=user.id)
+        db.commit()
+
         token = generate_token(
             user_id=str(user.id),
             role_key=role_key,
@@ -78,6 +84,7 @@ async def login(data: LoginRequest, db: Session = Depends(get_db)):
                 "roleKey": role_key,
                 "account": user.account,
                 "name": user.name,
+                "fontScale": user.font_scale or 1.0,
             },
         }
 
@@ -98,6 +105,8 @@ async def logout(
             status_code=401,
             detail={"status": 1, "message": "使用者不存在或已停用"},
         )
+
+    lock_user_past_tables_on_logout(db, int(user.user_id))
 
     current_user.token_version = (current_user.token_version or 0) + 1
     db.add(current_user)
@@ -196,6 +205,8 @@ async def update_user_profile(
         current_user.email = (update_data["email"] or "").strip() or None
     if "address" in update_data:
         current_user.address = (update_data["address"] or "").strip() or None
+    if "fontScale" in update_data and update_data["fontScale"] is not None:
+        current_user.font_scale = update_data["fontScale"]
 
     db.add(current_user)
     db.commit()

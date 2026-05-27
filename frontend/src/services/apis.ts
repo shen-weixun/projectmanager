@@ -92,6 +92,7 @@ import type {
     WithdrawAssetPayload,
 } from '@/types/api';
 import type { UserProfile, UserProfileUpdatePayload } from '@/types/api';
+import type { UserListItem } from '@/types/api';
 // 使用帳號密碼登入，取得 token 與使用者基本資訊。
 export const loginAPI = (username: string, password: string) =>
     safeRequest<LoginResponse, LoginPayload>('post', '/login', {
@@ -99,7 +100,7 @@ export const loginAPI = (username: string, password: string) =>
         password,
     });
 
-// 呼叫登出 API，無論後端結果如何都清除本地 token 並導回登入頁。
+// 呼叫登出 API（後端會鎖定過往週次已填寫表格，本週不受影響），再清除 token 並導回登入頁。
 export const logoutAPI = async () => {
     try {
         await api.post('/logout');
@@ -123,8 +124,14 @@ export const getUserProfileAPI = () => safeRequest<UserProfile>('get', '/user/pr
 export const updateUserProfileAPI = (payload: UserProfileUpdatePayload) =>
     safeRequest<UserProfile, UserProfileUpdatePayload>('patch', '/user/profile', payload);
 
+export const getUsersListAPI = () => safeRequest<UserListItem[]>('get', '/users/list');
+
 import type { Project } from '@/types/api';
 import type {
+    LeadCase,
+    LeadCasePayload,
+    LeadField,
+    LeadFieldPayload,
     ProjectCheckpointItem,
     ProjectCheckpointItemPayload,
     ProjectCreatePayload,
@@ -144,6 +151,38 @@ export const getProjectsAPI = (params?: any) =>
         page: number;
         pageSize: number;
     }>('get', '/project/list', undefined, { params });
+
+const PROJECT_LIST_PAGE_SIZE = 100;
+
+/** 分頁拉取全部專案（後端 pageSize 上限為 100）。 */
+export const fetchAllProjects = async (
+    params?: Record<string, unknown>
+): Promise<SafeResponse<Project[]>> => {
+    const items: Project[] = [];
+    let page = 1;
+    let total = 0;
+
+    while (true) {
+        const res = await getProjectsAPI({
+            ...params,
+            page,
+            pageSize: PROJECT_LIST_PAGE_SIZE,
+        });
+        if (res.status !== 0) {
+            return { status: -1, error: res.error };
+        }
+
+        items.push(...res.data.items);
+        total = res.data.total;
+
+        if (res.data.items.length === 0 || items.length >= total) {
+            break;
+        }
+        page += 1;
+    }
+
+    return { status: 0, data: items };
+};
 
 // 取得甘特圖使用的專案資料。
 export const getProjectGanttAPI = (params?: any) =>
@@ -260,6 +299,56 @@ export const updateProjectCheckpointAPI = (
 // 刪除專案檢核點項目。
 export const deleteProjectCheckpointAPI = (projectId: number, itemId: number) =>
     safeRequest<{ id: number }>('delete', `/project/${projectId}/checkpoint/${itemId}`);
+
+// ---------- Lead Management API ----------
+export const getLeadFieldsAPI = () =>
+    safeRequest<{ fields: LeadField[]; canEditFields: boolean }>('get', '/lead-management/fields');
+
+export const createLeadFieldAPI = (payload: LeadFieldPayload) =>
+    safeRequest<LeadField, LeadFieldPayload>('post', '/lead-management/fields', payload);
+
+export const updateLeadFieldAPI = (fieldId: number, payload: LeadFieldPayload) =>
+    safeRequest<LeadField, LeadFieldPayload>('patch', `/lead-management/fields/${fieldId}`, payload);
+
+export const deleteLeadFieldAPI = (fieldId: number) =>
+    safeRequest<{ id: number }>('delete', `/lead-management/fields/${fieldId}`);
+
+export const getLeadCasesAPI = () =>
+    safeRequest<LeadCase[]>('get', '/lead-management/cases');
+
+export const createLeadCaseAPI = (payload: LeadCasePayload) =>
+    safeRequest<LeadCase, LeadCasePayload>('post', '/lead-management/cases', payload);
+
+export const importLeadCasesAPI = (items: LeadCasePayload[]) =>
+    safeRequest<{ createdCount: number; items: LeadCase[] }, { items: LeadCasePayload[] }>(
+        'post',
+        '/lead-management/cases/import',
+        { items }
+    );
+
+export const importLeadCasesFromXlsxAPI = (payload: { filename?: string; contentBase64: string }) =>
+    safeRequest<{ createdCount: number; items: LeadCase[] }, { filename?: string; contentBase64: string }>(
+        'post',
+        '/lead-management/cases/import-xlsx',
+        payload
+    );
+
+export const exportLeadCasesXlsxAPI = async (): Promise<SafeResponse<Blob>> => {
+    try {
+        const response = await api.get<Blob>('/lead-management/cases/export-xlsx', {
+            responseType: 'blob',
+        });
+        return { status: 0, data: response.data };
+    } catch (error) {
+        return { status: -1, error };
+    }
+};
+
+export const updateLeadCaseAPI = (caseId: number, payload: LeadCasePayload) =>
+    safeRequest<LeadCase, LeadCasePayload>('patch', `/lead-management/cases/${caseId}`, payload);
+
+export const deleteLeadCaseAPI = (caseId: number) =>
+    safeRequest<{ id: number }>('delete', `/lead-management/cases/${caseId}`);
 
 // 取得公司部門與部門底下群組資料。
 export const getDepartmentAPI = () =>

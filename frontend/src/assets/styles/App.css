@@ -4,7 +4,7 @@
 
 .app-layout-main {
   margin-top: var(--header-height);
-  overflow-x: hidden;
+  overflow-x: auto;
   overflow-y: visible;
   padding-top: 1rem;
   padding-right: 1rem;
@@ -23,18 +23,29 @@
 
 .gantt-readable ._3zRJQ,
 .gantt-readable ._3KcaM,
-.gantt-readable ._2q1Kt,
-.gantt-readable ._9w8d5 {
+.gantt-readable ._2q1Kt {
   fill: #0b1220 !important;
-  font-size: 16px !important;
-  font-weight: 700 !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
   letter-spacing: 0.01em;
+}
+
+.gantt-readable ._9w8d5 {
+  fill: #475569 !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+}
+
+.gantt-viewport-shell {
+  width: 100%;
+  max-width: 100%;
 }
 
 .gantt-readable {
   position: relative;
   z-index: 30;
-  overflow: visible !important;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
 }
 
 .gantt-readable > div,

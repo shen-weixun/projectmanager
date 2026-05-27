@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Date, DateTime
+from sqlalchemy import Boolean, Column, Integer, String, ForeignKey, Date, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -22,7 +22,8 @@ class PMWeeklyReportTable(Base):
     # 儲存結構化的動態網格資料
     # 預設格式: {"headers": ["欄位1"], "rows": []}
     table_data = Column(JSONB, nullable=False, default=lambda: {"headers": ["欄位1"], "rows": []})
-    
+    is_locked = Column(Boolean, nullable=False, default=False, server_default="false")
+
     # 審計欄位 (選填，方便追蹤時間)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
@@ -46,7 +47,8 @@ class RDWeeklyReportTable(Base):
     
     # 預設格式: {"headers": ["欄位1"], "rows": []}
     table_data = Column(JSONB, nullable=False, default=lambda: {"headers": ["欄位1"], "rows": []})
-    
+    is_locked = Column(Boolean, nullable=False, default=False, server_default="false")
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 

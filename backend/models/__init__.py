@@ -4,6 +4,7 @@ from .company import Company
 from .department import Department
 from .group import Group
 from .log import ArchiveLog, ChangeLog
+from .lead_management import LeadCase, LeadField
 from .pm import PMProject
 from .project import Project, ProjectCheckpointItem, ProjectItemStatusOption, ProjectOption, ProjectScheduleItem, ProjectTodoItem
 from .rd import RDReport
@@ -20,6 +21,8 @@ __all__ = [
     "Company",
     "Department",
     "Group",
+    "LeadCase",
+    "LeadField",
     "PMProject",
     "PMWeeklyReport",
     "Project",

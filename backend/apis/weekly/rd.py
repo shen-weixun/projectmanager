@@ -1,5 +1,5 @@
 # RD 週報 API：處理動態自訂表格 (JSONB) 的 CRUD 與每個人獨立區塊的分配。
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -9,6 +9,14 @@ from db.core import get_db
 from models.weekly import RDWeeklyReportTable
 from models import User, Role, UserRole
 from utils.auth import AuthPayload, role_required
+from utils.report_period import (
+    assert_table_editable,
+    ensure_weekly_table_editable,
+    is_current_week,
+    is_table_read_only,
+    unlock_current_week_tables,
+    work_week_monday,
+)
 
 router = APIRouter(prefix="/rd", tags=["RD Weekly Report (Custom Dynamic Tables)"])
 
@@ -65,11 +73,22 @@ async def get_grouped_rd_tables(
     非 RD 角色（如 pm_user）因路由守衛在前端已被擋，後端這裡也有 role_required 保護。
     """
     current_uid = user_id(user)
+    target_week = datetime.strptime(week_start, "%Y-%m-%d").date()
+    target_monday = work_week_monday(target_week)
 
-    # 撈出該週所有的自訂表格項目
-    tables = db.query(RDWeeklyReportTable).filter(
-        RDWeeklyReportTable.week_start == week_start
-    ).all()
+    if is_current_week(target_week):
+        unlock_current_week_tables(db)
+        db.commit()
+
+    tables = (
+        db.query(RDWeeklyReportTable)
+        .filter(
+            RDWeeklyReportTable.week_start >= target_monday - timedelta(days=1),
+            RDWeeklyReportTable.week_start <= target_monday + timedelta(days=6),
+        )
+        .all()
+    )
+    tables = [t for t in tables if work_week_monday(t.week_start) == target_monday]
 
     grouped_data: Dict[int, Dict[str, Any]] = {}
 
@@ -87,6 +106,10 @@ async def get_grouped_rd_tables(
             "id": t.id,
             "table_name": t.table_name,
             "table_data": t.table_data,
+            "read_only": is_table_read_only(
+                is_locked=t.is_locked,
+                week_start=t.week_start,
+            ),
         })
 
     # 管理者：補全「還沒填寫」的 RD 人員區塊，讓管理者看到完整名單
@@ -160,11 +183,13 @@ async def create_rd_table(
 
     default_structure = {
         "headers": ["專案名稱", "開發工項", "目前狀態", "備註"],
-        "rows": [{"專案名稱": "", "開發工項": "", "目前狀態": "規劃中", "備註": ""}],
+        "rows": [{"專案名稱": "", "開發工項": "", "目前狀態": "", "備註": ""}],
     }
 
+    week_start = datetime.strptime(payload.week_start, "%Y-%m-%d").date()
+
     new_table = RDWeeklyReportTable(
-        week_start=datetime.strptime(payload.week_start, "%Y-%m-%d").date(),
+        week_start=week_start,
         user_id=user_id(user),
         table_name=payload.table_name.strip(),
         table_data=default_structure,
@@ -204,6 +229,8 @@ async def update_rd_table(
             status_code=403,
             detail={"status": 1, "message": "權限不足，您只能修改自己區塊內的表格"},
         )
+    ensure_weekly_table_editable(db, table)
+    assert_table_editable(is_locked=table.is_locked, week_start=table.week_start)
 
     data = payload.model_dump(exclude_unset=True)
 
@@ -211,7 +238,11 @@ async def update_rd_table(
         table.table_name = data["table_name"].strip()
 
     if "table_data" in data and data["table_data"] is not None:
-        table.table_data = data["table_data"]
+        incoming = data["table_data"]
+        existing_headers = (table.table_data or {}).get("headers", [])
+        if isinstance(existing_headers, list) and existing_headers:
+            incoming["headers"] = existing_headers
+        table.table_data = incoming
 
     db.add(table)
     db.commit()
@@ -247,6 +278,8 @@ async def delete_rd_table(
             status_code=403,
             detail={"status": 1, "message": "權限不足，您只能刪除自己建立的表格"},
         )
+    ensure_weekly_table_editable(db, table)
+    assert_table_editable(is_locked=table.is_locked, week_start=table.week_start)
 
     db.delete(table)
     db.commit()

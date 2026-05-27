@@ -21,8 +21,13 @@ from models import Base
 # 💡 【關鍵修改】手動匯入你的週報模型，這樣 Base.metadata 才能抓到它們的結構！
 # 請確認你的模型路徑（依照 pm.py 中的 `from models.weekly import PMWeeklyReportTable`）
 try:
-    from models.weekly import PMWeeklyReportTable
-    print("[Alembic] 成功匯入 PMWeeklyReportTable 模型！")
+    from models.weekly import PMWeeklyReportTable, RDWeeklyReportTable
+    from models.work_report import (
+        DailyWorkRecordTable,
+        WeeklyWorkRecordTable,
+        WorkReportColumnSchema,
+    )
+    print("[Alembic] 成功匯入週報與工作報告模型！")
 except ImportError:
     pass
 

@@ -52,10 +52,9 @@ const Header = ({ title }: HeaderProps) => {
         <h1 className="text-xl font-bold text-gray-800">{title}</h1>
       </div>
       <button
-        className="inline-flex items-center text-sm text-red-500 font-medium hover:underline"
-        onClick={() => {
-          logoutAPI()
-        }}
+        type="button"
+        className="inline-flex items-center text-sm text-red-500 font-medium hover:underline disabled:opacity-50"
+        onClick={() => void logoutAPI()}
       >
         <LogOut className="mr-1 h-4 w-4" />
         登出
