@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { Plus, X } from "lucide-react";
 
-import type { WorkReportOptionItem } from "@/utils/workReportOptions";
-import { normalizeOptionsList } from "@/utils/workReportOptions";
+import type { WorkReportOptionColor, WorkReportOptionItem } from "@/utils/workReportOptions";
+import { normalizeOptionsList, WORK_REPORT_OPTION_COLORS, OPTION_COLOR_STYLES } from "@/utils/workReportOptions";
 import WorkReportOptionSelect from "@/components/work-report/WorkReportOptionSelect";
 
 type Props = {
@@ -11,25 +11,27 @@ type Props = {
   onChange: (options: WorkReportOptionItem[]) => void;
 };
 
-export default function WorkReportOptionsEditorPanel({
-  header,
-  options,
-  onChange,
-}: Props) {
+const COLOR_LABELS: Record<WorkReportOptionColor, string> = {
+  red: "紅", orange: "橘", yellow: "黃", green: "綠",
+  blue: "藍", slate: "灰", purple: "紫", dark: "深",
+  rose: "粉", brown: "棕",
+};
+
+export default function WorkReportOptionsEditorPanel({ header, options, onChange }: Props) {
   const normalizedOptions = useMemo(() => {
     const normalized = normalizeOptionsList(options);
     return normalized.length > 0 ? normalized : [{ value: "", color: "slate" as const }];
   }, [options]);
 
-  const updateOption = (index: number, value: string) => {
-    const next = normalizedOptions.map((option, optionIndex) =>
-      optionIndex === index ? { ...option, value } : option
+  const updateOption = (index: number, patch: Partial<WorkReportOptionItem>) => {
+    const next = normalizedOptions.map((option, i) =>
+      i === index ? { ...option, ...patch } : option
     );
     onChange(next);
   };
 
   const removeOption = (index: number) => {
-    const next = normalizedOptions.filter((_, optionIndex) => optionIndex !== index);
+    const next = normalizedOptions.filter((_, i) => i !== index);
     onChange(next.length > 0 ? next : []);
   };
 
@@ -44,20 +46,31 @@ export default function WorkReportOptionsEditorPanel({
     <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-4">
       <div>
         <p className="text-sm font-bold text-slate-800">{header}</p>
-        <p className="mt-1 text-xs text-slate-500">
-          請直接設定這個下拉欄位可選的項目。
-        </p>
+        <p className="mt-1 text-xs text-slate-500">設定這個下拉欄位可選的項目與顏色。</p>
       </div>
 
       <div className="space-y-2">
         {normalizedOptions.map((option, index) => (
-          <div key={`${option.value}-${index}`} className="flex items-center gap-2">
+          <div key={`${option.value}-${index}`} className="grid grid-cols-[1fr_96px_36px] gap-2">
             <input
               value={option.value}
-              onChange={(event) => updateOption(index, event.target.value)}
+              onChange={(e) => updateOption(index, { value: e.target.value })}
               placeholder="輸入選項名稱"
-              className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="min-w-0 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
+            <select
+              value={option.color}
+              onChange={(e) => updateOption(index, { color: e.target.value as WorkReportOptionColor })}
+              className={`rounded-md border px-2 py-2 text-sm font-bold outline-none ${
+                OPTION_COLOR_STYLES[option.color]?.bg ?? "bg-slate-100"
+              } ${OPTION_COLOR_STYLES[option.color]?.text ?? "text-slate-700"}`}
+            >
+              {WORK_REPORT_OPTION_COLORS.map((color) => (
+                <option key={color} value={color}>
+                  {COLOR_LABELS[color]}
+                </option>
+              ))}
+            </select>
             <button
               type="button"
               onClick={() => removeOption(index)}
