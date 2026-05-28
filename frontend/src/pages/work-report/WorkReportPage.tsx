@@ -6099,71 +6099,24 @@ if (isManager) {
 
 
 
+updateTableData(block.user_id, table.id, {
+  headers,
+  rows: [
+    ...rows,
+    headers.reduce<Record<string, string>>((acc, h) => {
+      const fieldType = normalizeWorkReportFieldType(schemaFieldTypes[h]);
 
-                                updateTableData(block.user_id, table.id, {
+      const shouldAutoFillDate =
+        reportType === "daily" &&
+        (fieldType === "date" || h.includes("日期"));
 
-
-
-
-
-
-                                  headers,
-
-
-
-
-
-
-                                  rows: [
-
-
-
-
-
-
-                                    ...rows,
-
-
-
-
-
-
-                                    headers.reduce(
-
-
-
-
-
-
-                                      (acc, h) => ({ ...acc, [h]: "" }),
-
-
-
-
-
-
-                                      {}
-
-
-
-
-
-
-                                    ),
-
-
-
-
-
-
-                                  ],
-
-
-
-
-
-
-                                })
+      return {
+        ...acc,
+        [h]: shouldAutoFillDate ? periodKey : "",
+      };
+    }, {}),
+  ],
+})
 
 
 
