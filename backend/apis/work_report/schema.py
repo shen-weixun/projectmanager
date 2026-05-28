@@ -21,6 +21,19 @@ VALID_REPORT_TYPES = {REPORT_TYPE_DAILY, REPORT_TYPE_WEEKLY}
 
 class SchemaUpdatePayload(BaseModel):
     headers: list[str] = Field(..., min_length=1)
+    field_types: dict[str, str] | None = None
+
+
+VALID_FIELD_TYPES = {"text", "select", "date", "textarea"}
+
+
+def normalize_field_types(headers: list[str], raw: dict[str, str] | None) -> dict[str, str]:
+    raw = raw or {}
+    normalized: dict[str, str] = {}
+    for header in headers:
+        field_type = str(raw.get(header, "text")).strip()
+        normalized[header] = field_type if field_type in VALID_FIELD_TYPES else "text"
+    return normalized
 
 
 @router.get("/schema/{report_type}")
@@ -40,6 +53,7 @@ async def get_column_schema(
         "data": {
             "report_type": report_type,
             "headers": schema.headers,
+            "field_types": normalize_field_types(schema.headers, schema.field_types),
             "can_edit_schema": is_manager(user),
         },
     }
@@ -67,6 +81,7 @@ async def update_column_schema(
 
     schema = get_or_create_schema(db, report_type)
     schema.headers = cleaned
+    schema.field_types = normalize_field_types(cleaned, payload.field_types)
     db.add(schema)
     db.commit()
     db.refresh(schema)
@@ -74,5 +89,9 @@ async def update_column_schema(
     return {
         "status": 0,
         "message": "欄位範本已更新",
-        "data": {"report_type": report_type, "headers": schema.headers},
+        "data": {
+            "report_type": report_type,
+            "headers": schema.headers,
+            "field_types": normalize_field_types(schema.headers, schema.field_types),
+        },
     }

@@ -21,6 +21,17 @@ export function loadStoredFontScale(): number {
   return normalizeFontScale(localStorage.getItem(FONT_SCALE_KEY));
 }
 
+export function getStoredFontScale(): number | null {
+  const storedValue = localStorage.getItem(FONT_SCALE_KEY);
+  return storedValue === null ? null : normalizeFontScale(storedValue);
+}
+
 export function applyStoredFontScale(): void {
-  applyFontScale(loadStoredFontScale());
+  const storedScale = getStoredFontScale();
+  if (storedScale === null) {
+    applyFontScale(1, { persist: false });
+    return;
+  }
+
+  applyFontScale(storedScale);
 }

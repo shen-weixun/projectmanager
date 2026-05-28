@@ -42,13 +42,14 @@ const UserProfileSetting = () => {
       return
     }
 
+    const profileFontScale = normalizeFontScale(profileRes.data.fontScale)
     const nextForm = {
       groupName: profileRes.data.groupName ?? '',
       email: profileRes.data.email ?? '',
       address: profileRes.data.address ?? '',
-      fontScale: normalizeFontScale(profileRes.data.fontScale),
+      fontScale: profileFontScale,
     }
-    setProfile(profileRes.data)
+    setProfile({ ...profileRes.data, fontScale: profileFontScale })
     setForm(nextForm)
     applyFontScale(nextForm.fontScale)
     setIsLoading(false)
@@ -68,10 +69,13 @@ const UserProfileSetting = () => {
     )
   }, [form, profile])
 
+  const fontScalePosition = useMemo(() => {
+    return ((form.fontScale - 0.8) / (1.5 - 0.8)) * 100
+  }, [form.fontScale])
+
   const updateFontScale = (value: number) => {
     const nextScale = normalizeFontScale(value)
     setForm((prev) => ({ ...prev, fontScale: nextScale }))
-    applyFontScale(nextScale, { persist: false })
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -199,10 +203,15 @@ const UserProfileSetting = () => {
               onChange={(e) => updateFontScale(Number(e.target.value))}
               className="w-full accent-blue-600"
             />
-            <div className="mt-2 flex justify-between text-xs text-gray-500">
+            <div className="relative mt-2 h-5 text-xs text-gray-500">
               <span>0.8x</span>
-              <span>1.0x</span>
-              <span>1.5x</span>
+              <span
+                className="absolute -translate-x-1/2 font-semibold text-blue-600"
+                style={{ left: `${fontScalePosition}%` }}
+              >
+                {form.fontScale.toFixed(2)}x
+              </span>
+              <span className="absolute right-0">1.5x</span>
             </div>
           </div>
         </div>

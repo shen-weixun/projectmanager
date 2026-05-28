@@ -17,6 +17,7 @@ class WorkReportColumnSchema(Base):
     id = Column(Integer, primary_key=True, index=True)
     report_type = Column(String(20), nullable=False, unique=True, index=True)
     headers = Column(JSONB, nullable=False, default=lambda: list(DEFAULT_WORK_REPORT_HEADERS))
+    field_types = Column(JSONB, nullable=False, default=dict, server_default="{}")
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
 

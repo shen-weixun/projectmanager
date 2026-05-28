@@ -1,6 +1,16 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { ChevronLeft, ChevronRight, Download, Upload } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Edit3,
+  GripVertical,
+  Plus,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import AutoSaveIndicator from "@/components/AutoSaveIndicator";
 import WorkReportOptionSelect from "@/components/work-report/WorkReportOptionSelect";
 import WorkReportOptionsEditorPanel from "@/components/work-report/WorkReportOptionsEditorPanel";
@@ -44,6 +54,24 @@ interface UserAccount {
 }
 
 type ReportType = "daily" | "weekly";
+type WorkReportFieldType = "text" | "select" | "date" | "textarea";
+
+const WORK_REPORT_FIELD_TYPE_LABELS: Record<WorkReportFieldType, string> = {
+  text: "??",
+  select: "銝??詨",
+  date: "?交?",
+  textarea: "憭???",
+};
+
+const WORK_REPORT_FIELD_TYPE_OPTIONS = Object.entries(
+  WORK_REPORT_FIELD_TYPE_LABELS
+) as [WorkReportFieldType, string][];
+
+const normalizeWorkReportFieldType = (value: unknown): WorkReportFieldType => {
+  return value === "select" || value === "date" || value === "textarea"
+    ? value
+    : "text";
+};
 
 interface WorkReportPageProps {
   reportType: ReportType;
@@ -98,6 +126,13 @@ export default function WorkReportPage({
   const [blocks, setBlocks] = useState<UserBlock[]>([]);
   const [schemaHeaders, setSchemaHeaders] = useState<string[]>([]);
   const [schemaDraft, setSchemaDraft] = useState<string[]>([]);
+  const [schemaFieldDraft, setSchemaFieldDraft] = useState("");
+  const [schemaFieldTypeDraft, setSchemaFieldTypeDraft] =
+    useState<WorkReportFieldType>("text");
+  const [schemaFieldTypes, setSchemaFieldTypes] = useState<Record<string, WorkReportFieldType>>({});
+  const [schemaFieldTypesDraft, setSchemaFieldTypesDraft] = useState<Record<string, WorkReportFieldType>>({});
+  const [editingSchemaIndex, setEditingSchemaIndex] = useState<number | null>(null);
+  const [draggingSchemaIndex, setDraggingSchemaIndex] = useState<number | null>(null);
   const [optionsByHeader, setOptionsByHeader] = useState<OptionsByHeader>({});
   const [manageOptionsPm, setManageOptionsPm] = useState<OptionsByHeader>({});
   const [manageOptionsRd, setManageOptionsRd] = useState<OptionsByHeader>({});
@@ -165,8 +200,18 @@ export default function WorkReportPage({
 
       if (schemaResponse.data?.status === 0) {
         const headers = schemaResponse.data.data.headers as string[];
+        const fieldTypes = Object.fromEntries(
+          headers.map((header) => [
+            header,
+            normalizeWorkReportFieldType(
+              schemaResponse.data.data.field_types?.[header]
+            ),
+          ])
+        );
         setSchemaHeaders(headers);
         setSchemaDraft(headers);
+        setSchemaFieldTypes(fieldTypes);
+        setSchemaFieldTypesDraft(fieldTypes);
       }
 
       if (optionsResponse.data?.status === 0) {
@@ -206,7 +251,7 @@ export default function WorkReportPage({
         );
       }
     } catch (error) {
-      console.error("撈取工作紀錄失敗:", error);
+      console.error("??撌乩?蝝?仃??", error);
     } finally {
       setLoading(false);
     }
@@ -319,10 +364,10 @@ export default function WorkReportPage({
         );
         setShowOptionsEditor(false);
       } else {
-        alert("儲存選項失敗，請稍後再試");
+        alert("?脣??賊?憭望?嚗?蝔??岫");
       }
     } catch {
-      alert("儲存選項失敗，請稍後再試");
+      alert("?脣??賊?憭望?嚗?蝔??岫");
     } finally {
       setSavingOptions(false);
     }
@@ -344,8 +389,8 @@ export default function WorkReportPage({
 
   const createPayload = () =>
     reportType === "daily"
-      ? { record_date: periodKey, table_name: "未命名表格" }
-      : { week_start: periodKey, table_name: "未命名表格" };
+      ? { record_date: periodKey, table_name: "工作紀錄" }
+      : { week_start: periodKey, table_name: "工作紀錄" };
 
   const handleCreateNewTable = async () => {
     if (creating) return;
@@ -360,7 +405,7 @@ export default function WorkReportPage({
         fetchData();
       }
     } catch {
-      alert("建立表格失敗，請稍後再試");
+      alert("撱箇?銵冽憭望?嚗?蝔??岫");
     } finally {
       setCreating(false);
     }
@@ -388,7 +433,7 @@ export default function WorkReportPage({
       );
       if (response.data?.status === 0) return true;
       throw new Error(
-          response.data?.message || "儲存失敗，請確認後端服務與資料庫 migration"
+          response.data?.message || "?脣?憭望?嚗?蝣箄?敺垢?????澈 migration"
       );
     },
     [apiBase, getRequestConfig, periodKey, reportType, schemaHeaders]
@@ -421,12 +466,15 @@ export default function WorkReportPage({
         fetchData();
       }
     } catch {
-      alert("刪除失敗");
+      alert("?芷憭望?");
     }
   };
 
-  const handleSaveSchema = async () => {
-    const cleaned = schemaDraft.map((h) => h.trim()).filter(Boolean);
+  const persistSchema = async (
+    nextDraft = schemaDraft,
+    nextTypes = schemaFieldTypesDraft
+  ) => {
+    const cleaned = nextDraft.map((h) => h.trim()).filter(Boolean);
     if (cleaned.length === 0) {
       alert("至少需要一個欄位");
       return;
@@ -435,18 +483,121 @@ export default function WorkReportPage({
     try {
       const response = await axios.put(
         `/api/work-report/schema/${reportType}`,
-        { headers: cleaned },
+        {
+          headers: cleaned,
+          field_types: Object.fromEntries(
+            cleaned.map((header) => [
+              header,
+              normalizeWorkReportFieldType(nextTypes[header]),
+            ])
+          ),
+        },
         getRequestConfig()
       );
       if (response.data?.status === 0) {
         setSchemaHeaders(cleaned);
+        const fieldTypes = Object.fromEntries(
+          cleaned.map((header) => [
+            header,
+            normalizeWorkReportFieldType(
+              response.data.data?.field_types?.[header] ??
+                nextTypes[header]
+            ),
+          ])
+        );
+        setSchemaFieldTypes(fieldTypes);
+        setSchemaFieldTypesDraft(fieldTypes);
         fetchData();
       }
     } catch {
-      alert("欄位設定儲存失敗");
+      alert("甈?閮剖??脣?憭望?");
     } finally {
       setSavingSchema(false);
     }
+  };
+
+  const resetSchemaFieldDraft = () => {
+    setSchemaFieldDraft("");
+    setSchemaFieldTypeDraft("text");
+    setEditingSchemaIndex(null);
+  };
+
+  const submitSchemaField = () => {
+    const nextHeader = schemaFieldDraft.trim();
+    if (!nextHeader) {
+      alert("請輸入欄位名稱");
+      return;
+    }
+    const nextDraft =
+      editingSchemaIndex === null
+        ? [...schemaDraft, nextHeader]
+        : schemaDraft.map((header, index) =>
+        index === editingSchemaIndex ? nextHeader : header
+      );
+    const nextTypes = { ...schemaFieldTypesDraft };
+    if (editingSchemaIndex !== null) {
+      const oldHeader = schemaDraft[editingSchemaIndex];
+      if (oldHeader && oldHeader !== nextHeader) delete nextTypes[oldHeader];
+    }
+    nextTypes[nextHeader] = schemaFieldTypeDraft;
+    setSchemaDraft(nextDraft);
+    setSchemaFieldTypesDraft(nextTypes);
+    resetSchemaFieldDraft();
+    persistSchema(nextDraft, nextTypes);
+  };
+
+  const editSchemaField = (index: number) => {
+    const header = schemaDraft[index] ?? "";
+    setSchemaFieldDraft(header);
+    setSchemaFieldTypeDraft(normalizeWorkReportFieldType(schemaFieldTypesDraft[header]));
+    setEditingSchemaIndex(index);
+  };
+
+  const removeSchemaField = (index: number) => {
+    const removedHeader = schemaDraft[index];
+    const nextDraft = schemaDraft.filter((_, itemIndex) => itemIndex !== index);
+    const nextTypes = { ...schemaFieldTypesDraft };
+    if (removedHeader) delete nextTypes[removedHeader];
+    setSchemaDraft(nextDraft);
+    setSchemaFieldTypesDraft(nextTypes);
+    if (editingSchemaIndex === index) resetSchemaFieldDraft();
+    else if (editingSchemaIndex !== null && editingSchemaIndex > index) {
+      setEditingSchemaIndex(editingSchemaIndex - 1);
+    }
+    persistSchema(nextDraft, nextTypes);
+  };
+
+  const handleSchemaDragStart = (
+    event: React.DragEvent<HTMLDivElement>,
+    index: number
+  ) => {
+    setDraggingSchemaIndex(index);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(index));
+  };
+
+  const handleSchemaDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  };
+
+  const handleSchemaDrop = (
+    event: React.DragEvent<HTMLDivElement>,
+    targetIndex: number
+  ) => {
+    event.preventDefault();
+    const sourceIndex =
+      draggingSchemaIndex ?? Number(event.dataTransfer.getData("text/plain"));
+    setDraggingSchemaIndex(null);
+    if (!Number.isFinite(sourceIndex) || sourceIndex === targetIndex) return;
+
+    const nextDraft = [...schemaDraft];
+    const [sourceHeader] = nextDraft.splice(sourceIndex, 1);
+    if (!sourceHeader) return;
+    nextDraft.splice(targetIndex, 0, sourceHeader);
+    setSchemaDraft(nextDraft);
+    resetSchemaFieldDraft();
+    persistSchema(nextDraft, schemaFieldTypesDraft);
   };
 
   const updateTableName = (userId: number, tableId: number, newName: string) => {
@@ -503,10 +654,6 @@ export default function WorkReportPage({
         scheduleSave(table);
       return next;
     });
-  };
-
-  const addSchemaColumn = () => {
-    setSchemaDraft((prev) => [...prev, `欄位 ${prev.length + 1}`]);
   };
 
   const visibleBlocks = isManager
@@ -569,7 +716,7 @@ export default function WorkReportPage({
         reportType === "weekly" ? "weekly-work-record" : "daily-work-record";
       downloadBlob(response.data, `${prefix}-${periodKey}.xlsx`);
     } catch (error) {
-      alert(getErrorMessage(error, "匯出 XLSX 失敗，請稍後再試"));
+      alert(getErrorMessage(error, "?臬 XLSX 憭望?嚗?蝔??岫"));
     } finally {
       setExportingXlsx(false);
     }
@@ -589,7 +736,7 @@ export default function WorkReportPage({
       event.target.value = "";
       if (!file || importingXlsx) return;
       if (!file.name.toLowerCase().endsWith(".xlsx")) {
-        alert("請選擇 .xlsx 檔案");
+        alert("隢??.xlsx 瑼?");
         return;
       }
 
@@ -606,11 +753,11 @@ export default function WorkReportPage({
         );
         if (response.data?.status === 0) {
           const createdCount = response.data.data?.createdCount ?? 0;
-          alert(`匯入成功：新增 ${createdCount} 張表格`);
+          alert(`匯入成功，共新增 ${createdCount} 張表格`);
           fetchData();
         }
       } catch (error) {
-        alert(getErrorMessage(error, "匯入 XLSX 失敗，請確認欄位格式後再試"));
+        alert(getErrorMessage(error, "匯入 XLSX 失敗"));
       } finally {
         setImportingXlsx(false);
       }
@@ -638,7 +785,7 @@ export default function WorkReportPage({
             <button
               onClick={() => shiftPeriod(-1)}
               className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-white hover:shadow-sm transition text-slate-600"
-              title={reportType === "daily" ? "前一天" : "上一週（週一～週五）"}
+              title={reportType === "daily" ? "前一天" : "前一週"}
             >
               <ChevronLeft size={18} />
             </button>
@@ -650,7 +797,7 @@ export default function WorkReportPage({
             <button
               onClick={() => shiftPeriod(1)}
               className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-white hover:shadow-sm transition text-slate-600"
-              title={reportType === "daily" ? "後一天" : "下一週（週一～週五）"}
+              title={reportType === "daily" ? "後一天" : "後一週"}
             >
               <ChevronRight size={18} />
             </button>
@@ -661,7 +808,7 @@ export default function WorkReportPage({
               onClick={goToCurrentPeriod}
               className="text-sm font-medium text-blue-600 hover:text-blue-800 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50 transition"
             >
-              {reportType === "daily" ? "回到今天" : "回到本週（週一～週五）"}
+              {reportType === "daily" ? "回到今天" : "回到本週"}
             </button>
           )}
 
@@ -669,7 +816,7 @@ export default function WorkReportPage({
             type="button"
             onClick={() => importInputRef.current?.click()}
             disabled={importingXlsx}
-            title="將 XLSX 匯入目前日期或週次，並建立新的工作紀錄表格"
+            title="匯入 XLSX"
             className="inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 px-4 py-2 text-sm font-medium rounded-xl hover:bg-slate-50 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Upload size={16} aria-hidden />
@@ -687,11 +834,11 @@ export default function WorkReportPage({
             type="button"
             onClick={handleExportXlsx}
             disabled={!canExportXlsx || exportingXlsx}
-            title="匯出目前日期或週次、畫面上可見的所有表格為 XLSX"
+            title="?臬?桀??交??望活??Ｖ??航????”?潛 XLSX"
             className="inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 px-4 py-2 text-sm font-medium rounded-xl hover:bg-slate-50 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download size={16} aria-hidden />
-            {exportingXlsx ? "匯出中..." : "匯出 XLSX"}
+            {exportingXlsx ? "?臬銝?.." : "?臬 XLSX"}
           </button>
 
           <button
@@ -699,71 +846,159 @@ export default function WorkReportPage({
             disabled={creating}
             className="bg-blue-600 text-white px-4 py-2 text-sm font-medium rounded-xl hover:bg-blue-700 transition shadow-sm disabled:opacity-60"
           >
-            {creating ? "建立中..." : "➕ 為我新增表格"}
+            {creating ? "撱箇?銝?.." : "???箸??啣?銵冽"}
           </button>
         </div>
       </div>
 
       {isManager && (
-        <div className="bg-white rounded-xl border border-amber-200 p-4 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
             <div>
-              <h2 className="text-sm font-bold text-amber-800">
-                管理者：欄位設定（全站共用）
-              </h2>
-              <p className="text-xs text-slate-500">
-                一般使用者無法新增或修改欄位，僅能填寫資料列。目前欄位：
-                {schemaHeaders.length > 0 ? schemaHeaders.join("、") : "（尚未設定）"}
+              <h2 className="text-lg font-bold text-slate-900">欄位設定</h2>
+              <p className="mt-1 text-xs font-semibold text-slate-500">
+                依序建立工作紀錄欄位，新增、更新、刪除或排序後會自動儲存。
               </p>
             </div>
             <button
               type="button"
               onClick={() => setShowOptionsEditor((v) => !v)}
-              className="text-xs font-bold border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50"
+              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
             >
-              {showOptionsEditor ? "收合彩色下拉設定" : "彩色下拉選項設定（PM / RD）"}
+              {showOptionsEditor ? "收合彩色下拉設定" : "彩色下拉選項設定"}
             </button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {schemaDraft.map((header, index) => (
-              <input
-                key={index}
-                type="text"
-                value={header}
-                onChange={(e) => {
-                  const next = [...schemaDraft];
-                  next[index] = e.target.value;
-                  setSchemaDraft(next);
-                }}
-                className="border border-slate-200 rounded-lg px-2 py-1 text-sm min-w-[120px]"
-              />
-            ))}
-            <button
-              type="button"
-              onClick={addSchemaColumn}
-              className="text-xs border border-slate-200 px-2 py-1 rounded-lg hover:bg-slate-50"
-            >
-              ➕ 新增欄位
-            </button>
+          <div className="grid gap-5 p-5 lg:grid-cols-[320px_minmax(0,1fr)]">
+            <div className="space-y-4">
+              <label>
+                <span className="mb-1 block text-sm font-bold text-slate-700">
+                  欄位名稱
+                </span>
+                <input
+                  type="text"
+                  value={schemaFieldDraft}
+                  onChange={(event) => setSchemaFieldDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      submitSchemaField();
+                    }
+                  }}
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-sm font-bold text-slate-700">
+                  欄位型態
+                </span>
+                <select
+                  value={schemaFieldTypeDraft}
+                  onChange={(event) =>
+                    setSchemaFieldTypeDraft(
+                      normalizeWorkReportFieldType(event.target.value)
+                    )
+                  }
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                >
+                  {WORK_REPORT_FIELD_TYPE_OPTIONS.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={submitSchemaField}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-blue-700 px-3 py-2 text-sm font-bold text-white hover:bg-blue-800"
+                >
+                  <Plus className="h-4 w-4" />
+                  {editingSchemaIndex === null ? "新增欄位" : "更新欄位"}
+                </button>
+                {editingSchemaIndex !== null && (
+                  <button
+                    type="button"
+                    onClick={resetSchemaFieldDraft}
+                    className="inline-flex items-center justify-center rounded-md border px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+                    aria-label="取消編輯"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              {savingSchema && (
+                <p className="text-xs font-semibold text-slate-500">
+                  欄位設定儲存中...
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              {schemaDraft.length === 0 ? (
+                <div className="rounded-md border border-dashed border-slate-300 px-4 py-6 text-center text-sm font-semibold text-slate-400">
+                  尚未建立欄位
+                </div>
+              ) : (
+                schemaDraft.map((header, index) => (
+                  <div
+                    key={`${header}-${index}`}
+                    draggable
+                    onDragStart={(event) => handleSchemaDragStart(event, index)}
+                    onDragOver={handleSchemaDragOver}
+                    onDrop={(event) => handleSchemaDrop(event, index)}
+                    onDragEnd={() => setDraggingSchemaIndex(null)}
+                    className={`flex cursor-grab items-center justify-between gap-3 rounded-md border px-3 py-2 active:cursor-grabbing ${
+                      draggingSchemaIndex === index
+                        ? "border-blue-300 bg-blue-50 opacity-70"
+                        : "border-slate-200 bg-white"
+                    }`}
+                  >
+                    <GripVertical className="h-4 w-4 shrink-0 text-slate-400" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-slate-800">
+                        {header || "未命名欄位"}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {WORK_REPORT_FIELD_TYPE_LABELS[
+                          normalizeWorkReportFieldType(schemaFieldTypesDraft[header])
+                        ]}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => editSchemaField(index)}
+                        className="rounded-md p-2 text-slate-500 hover:bg-slate-100"
+                        aria-label="蝺刻摩甈?"
+                      >
+                        <Edit3 className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeSchemaField(index)}
+                        className="rounded-md p-2 text-red-500 hover:bg-red-50"
+                        aria-label="?芷甈?"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
-          <button
-            onClick={handleSaveSchema}
-            disabled={savingSchema}
-            className="text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg disabled:opacity-60"
-          >
-            {savingSchema ? "儲存中..." : "💾 儲存欄位設定"}
-          </button>
 
           {showOptionsEditor && (
-            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+            <div className="mt-4 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-extrabold text-slate-900">
-                    彩色下拉式選單（類似項目狀態）
+                    彩色下拉選項設定
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    為每個欄位建立 PM / RD 專用選項與標籤顏色；管理者填寫時使用 RD
-                    選項。
+                    可分別設定 PM / RD 可用的下拉選項與標籤顏色。
                   </p>
                 </div>
                 <button
@@ -772,7 +1007,7 @@ export default function WorkReportPage({
                   disabled={savingOptions}
                   className="text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg disabled:opacity-60"
                 >
-                  {savingOptions ? "儲存中..." : "💾 儲存全部下拉選項"}
+                  {savingOptions ? "儲存中..." : "儲存下拉選項"}
                 </button>
               </div>
 
@@ -790,7 +1025,7 @@ export default function WorkReportPage({
                       />
                       <WorkReportOptionsEditorPanel
                         header={header}
-                        roleLabel="RD（管理者填寫）"
+                        roleLabel="RD"
                         options={manageOptionsRd[header] ?? []}
                         onChange={(options) =>
                           setManageOptionsForRole("rd", header, options)
@@ -806,11 +1041,11 @@ export default function WorkReportPage({
       )}
 
       {loading ? (
-        <div className="text-center py-10 text-slate-500">資料載入中...</div>
+        <div className="text-center py-10 text-slate-500">鞈?頛銝?..</div>
       ) : visibleBlocks.length === 0 ? (
         <div className="text-center py-16 text-slate-400">
-          <p className="text-lg font-medium">目前尚無工作紀錄</p>
-          <p className="text-sm mt-2">點擊右上角「為我新增表格」開始填寫</p>
+          <p className="text-lg font-medium">目前沒有工作紀錄</p>
+          <p className="text-sm mt-2">請建立表格後開始填寫。</p>
         </div>
       ) : (
         <div className="space-y-8">
@@ -824,11 +1059,11 @@ export default function WorkReportPage({
               <div className="flex justify-between items-center border-b border-slate-100 pb-3">
                 <div className="flex items-center space-x-2">
                   <h2 className="text-xl font-bold text-slate-700">
-                    {block.user_name} 的工作紀錄
+                    {block.user_name} ?極雿???
                   </h2>
                   {!block.is_current_user && (
                     <span className="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-medium">
-                      唯讀
+                      ?航?
                     </span>
                   )}
                 </div>
@@ -838,7 +1073,7 @@ export default function WorkReportPage({
                     disabled={creating}
                     className="bg-blue-600 text-white px-4 py-2 text-sm font-medium rounded-xl hover:bg-blue-700 transition shadow-sm disabled:opacity-60"
                   >
-                    ➕ 建立新表格
+                    ??撱箇??啗”??
                   </button>
                 )}
               </div>
@@ -846,8 +1081,8 @@ export default function WorkReportPage({
               {block.tables.length === 0 ? (
                 <p className="text-center py-6 text-slate-400 text-sm">
                   {block.is_current_user
-                    ? "尚未建立任何表格。"
-                    : "此人尚未填寫工作紀錄。"}
+                    ? "尚未建立任何表格"
+                    : "此使用者尚未填寫工作紀錄"}
                 </p>
               ) : (
                 block.tables.map((table) => {
@@ -875,7 +1110,7 @@ export default function WorkReportPage({
                         <div className="flex items-center gap-2 flex-wrap">
                           {tableReadOnly && block.is_current_user && (
                             <span className="text-xs bg-amber-50 text-amber-700 px-2.5 py-1 rounded-full font-medium">
-                              已鎖定 · 僅供查閱
+                              撌脤?摰?繚 ???仿
                             </span>
                           )}
                           <input
@@ -901,7 +1136,7 @@ export default function WorkReportPage({
                               status={statusByTableId[table.id]}
                               errorMessage={
                                 isCurrentPeriod &&
-                                errorByTableId[table.id]?.includes("鎖定")
+                                errorByTableId[table.id]?.includes("??")
                                   ? null
                                   : errorByTableId[table.id]
                               }
@@ -926,13 +1161,13 @@ export default function WorkReportPage({
                               }
                               className="text-sm font-medium bg-slate-50 hover:bg-slate-100 border text-slate-600 px-3 py-2 rounded-lg"
                             >
-                              ➕ 新增資料列
+                              ???啣?鞈???
                             </button>
                             <button
                               onClick={() => handleDeleteTable(table.id)}
                               className="text-sm font-medium bg-red-50 hover:bg-red-100 text-red-600 px-3 py-2 rounded-lg"
                             >
-                              🗑️ 刪除
+                              ??儭??芷
                             </button>
                           </div>
                         )}
@@ -959,7 +1194,7 @@ export default function WorkReportPage({
                                   colSpan={headers.length || 1}
                                   className="text-center p-4 text-slate-400"
                                 >
-                                  無資料，請點擊上方新增資料列
+                                  ?∟???隢????寞憓???
                                 </td>
                               </tr>
                             ) : (
@@ -968,56 +1203,56 @@ export default function WorkReportPage({
                                   key={rIndex}
                                   className="hover:bg-slate-50/50"
                                 >
-                                  {headers.map((header, cIndex) => (
+                                  {headers.map((header, cIndex) => {
+                                    const fieldType = normalizeWorkReportFieldType(schemaFieldTypes[header]);
+                                    const updateCell = (nextValue: string) => {
+                                      const updatedRows = [...rows];
+                                      updatedRows[rIndex] = {
+                                        ...updatedRows[rIndex],
+                                        [header]: nextValue,
+                                      };
+                                      updateTableData(block.user_id, table.id, {
+                                        headers,
+                                        rows: updatedRows,
+                                      });
+                                    };
+                                    return (
                                     <td
                                       key={cIndex}
                                       className="border border-slate-200 p-1"
                                     >
-                                      {optionsByHeader[header]?.length ? (
+                                      {fieldType === "select" ? (
                                         <WorkReportOptionSelect
-                                          options={optionsByHeader[header]}
+                                          options={optionsByHeader[header] ?? []}
                                           value={row[header] || ""}
                                           disabled={!isEditable}
-                                          onChange={(nextValue) => {
-                                            const updatedRows = [...rows];
-                                            updatedRows[rIndex] = {
-                                              ...updatedRows[rIndex],
-                                              [header]: nextValue,
-                                            };
-                                            updateTableData(block.user_id, table.id, {
-                                              headers,
-                                              rows: updatedRows,
-                                            });
-                                          }}
+                                          onChange={updateCell}
+                                        />
+                                      ) : isEditable && fieldType === "textarea" ? (
+                                        <textarea
+                                          className="min-h-20 w-full resize-y rounded border-none bg-transparent p-1.5 text-slate-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                          value={row[header] || ""}
+                                          onChange={(e) => updateCell(e.target.value)}
                                         />
                                       ) : isEditable ? (
                                         <input
-                                          type="text"
+                                          type={fieldType === "date" ? "date" : "text"}
                                           className="w-full p-1.5 border-none bg-transparent text-slate-600 focus:bg-white focus:ring-1 focus:ring-blue-500 focus:rounded focus:outline-none"
                                           value={row[header] || ""}
-                                          onChange={(e) => {
-                                            const updatedRows = [...rows];
-                                            updatedRows[rIndex] = {
-                                              ...updatedRows[rIndex],
-                                              [header]: e.target.value,
-                                            };
-                                            updateTableData(block.user_id, table.id, {
-                                              headers,
-                                              rows: updatedRows,
-                                            });
-                                          }}
+                                          onChange={(e) => updateCell(e.target.value)}
                                         />
                                       ) : (
                                         <span className="p-1.5 block min-h-[32px] whitespace-pre-wrap text-slate-700">
                                           {row[header] ? (
                                             <WorkReportOptionPill label={row[header]} />
                                           ) : (
-                                            "—"
+                                            "-"
                                           )}
                                         </span>
                                       )}
                                     </td>
-                                  ))}
+                                    );
+                                  })}
                                 </tr>
                               ))
                             )}
@@ -1037,22 +1272,22 @@ export default function WorkReportPage({
         <section className="mt-10 pt-8 border-t-2 border-dashed border-slate-200">
           <div className="mb-6">
             <h2 className="text-xl font-bold text-slate-700">
-              前一週工作紀錄
+              ???勗極雿???
             </h2>
             <p className="text-sm text-slate-500 mt-1">
-              {prevWeekLabel} · 僅供參考查閱，無法在此區塊編輯
+              {prevWeekLabel} 繚 ????梧??⊥??冽迨?憛楊頛?
             </p>
           </div>
           {prevWeekLoading ? (
             <div className="text-center py-8 text-slate-500 text-sm">
-              前一週資料載入中…
+              ???梯????乩葉??
             </div>
           ) : (
             <WorkReportReadOnlyTables
               blocks={visiblePrevWeekBlocks}
               schemaHeaders={schemaHeaders}
               optionsByHeader={optionsByHeader}
-              emptyMessage="前一週尚無任何工作紀錄"
+              emptyMessage="前一週沒有工作紀錄"
             />
           )}
         </section>

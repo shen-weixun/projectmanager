@@ -34,11 +34,11 @@ export interface UserProfile {
 }
 
 export interface UserProfileUpdatePayload {
-    groupId: number | null;
-    groupName: string;
-    email: string;
-    address: string;
-    fontScale: number;
+    groupId?: number | null;
+    groupName?: string;
+    email?: string;
+    address?: string;
+    fontScale?: number;
 }
 
 // 專案列表與甘特圖使用的專案基本資料。

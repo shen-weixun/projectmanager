@@ -18,9 +18,24 @@ COMPANY_ADMIN_ROLES = ("super", "boss")
 class CompanyInfoUpdate(BaseModel):
     name: Optional[str] = None
     nameEn: Optional[str] = None
+    logo: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
     address: Optional[str] = None
+
+
+def normalize_logo_path(value: str | None) -> str | None:
+    logo_path = (value or "").strip()
+    if not logo_path:
+        return None
+    if (
+        logo_path.startswith("/")
+        or logo_path.startswith("http://")
+        or logo_path.startswith("https://")
+        or logo_path.startswith("data:")
+    ):
+        return logo_path
+    return f"/{logo_path}"
     
 class DepartmentCreate(BaseModel):
     name: str = Field(..., description="部門名稱")
@@ -37,12 +52,25 @@ class GroupCreate(BaseModel):
 
 
 @router.get("/company-info", summary="取得公司資訊")
-async def company_info():
+async def company_info(db: Session = Depends(get_db)):
     """取得公司基本資訊"""
+    from models import Company
+
+    company = db.query(Company).order_by(Company.id.asc()).first()
+    if company:
+        return {
+            "status": 0,
+            "data": {
+                "CompanyName": company.name or "",
+                "CompanyNameEn": company.name_en or "",
+                "logo": company.logo or "",
+            },
+        }
+
     company_info = {
         "CompanyName": "廣思通訊",
         "CompanyNameEn": "Qamstar TECHNOLOGY CO., LTD.",
-        "logo": "./src/assets/images/logo.png"
+        "logo": "/logo.png"
     }
     return {"status": 0, "data": company_info}
 
@@ -52,7 +80,7 @@ async def get_company_info(
     db: Session = Depends(get_db),
 ):
     from models import Company
-    company = db.query(Company).first()
+    company = db.query(Company).order_by(Company.id.asc()).first()
     if not company:
         raise HTTPException(status_code=404, detail={"status": 1, "message": "尚未設定公司資訊"})
     return {
@@ -76,7 +104,7 @@ async def update_company_info(
     db: Session = Depends(get_db),
 ):
     from models import Company
-    company = db.query(Company).first()
+    company = db.query(Company).order_by(Company.id.asc()).first()
     if not company:
         raise HTTPException(status_code=404, detail={"status": 1, "message": "尚未設定公司資訊"})
 
@@ -84,13 +112,17 @@ async def update_company_info(
     field_map = {
     "name": "name",
     "nameEn": "name_en",
+    "logo": "logo",
     "phone": "phone",
     "email": "email",
     "address": "address",
-  }
+    }
     for field, value in update_data.items():
         snake = field_map.get(field, field)
-        setattr(company, snake, (value or "").strip() or None)
+        if field == "logo":
+            setattr(company, snake, normalize_logo_path(value))
+        else:
+            setattr(company, snake, (value or "").strip() or None)
 
     db.commit()
     db.refresh(company)
