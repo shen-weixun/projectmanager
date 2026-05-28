@@ -2256,25 +2256,30 @@ export default function WorkReportPage({
 
 
 
-
-  const saveOptionsForRole = async (
-    role: "pm" | "rd",
-    nextOptionsByHeader: OptionsByHeader
-  ) => {
-    if (!isManager) return;
-    try {
-      const response = await axios.put(
-        `/api/work-report/options/${reportType}/${role}`,
-        { options_by_header: serializeOptionsForApi(nextOptionsByHeader) },
-        getRequestConfig()
-      );
-      if (response.data?.status === 0 && role === effectiveRole) {
-        setOptionsByHeader(nextOptionsByHeader);
+const saveOptionsForRole = async (
+  role: "pm" | "rd",
+  nextOptionsByHeader: OptionsByHeader
+) => {
+  if (!isManager) return;
+  try {
+    const response = await axios.put(
+      `/api/work-report/options/${reportType}/${role}`,
+      { options_by_header: serializeOptionsForApi(nextOptionsByHeader) },
+      getRequestConfig()
+    );
+    if (response.data?.status === 0) {
+      if (role === "rd") {
+        setManageOptionsRd(nextOptionsByHeader);
+      } else {
+        setManageOptionsPm(nextOptionsByHeader);
       }
-    } catch {
-      alert("儲存失敗，請稍後再試");
+      // 同步更新使用者看到的選項（不分角色，pm/rd 都能看到）
+      setOptionsByHeader(nextOptionsByHeader);
     }
-  };
+  } catch {
+    alert("儲存失敗，請稍後再試");
+  }
+};
 
   const shiftPeriod = (delta: number) => {
 
@@ -3281,26 +3286,29 @@ export default function WorkReportPage({
     setSchemaDraft(nextDraft);
     setSchemaFieldTypesDraft(nextTypes);
 
-    if (isManager) {
-      const nextOptions = normalizeOptionsList(schemaFieldOptionsDraft);
-      const nextRoleOptions = {
-        ...(effectiveRole === "rd" ? manageOptionsRd : manageOptionsPm),
-      };
-      if (oldHeader && oldHeader !== nextHeader) delete nextRoleOptions[oldHeader];
-      if (schemaFieldTypeDraft === "select") {
-        nextRoleOptions[nextHeader] = nextOptions;
-      } else {
-        delete nextRoleOptions[nextHeader];
-      }
+if (isManager) {
+  const nextOptions = normalizeOptionsList(schemaFieldOptionsDraft);
 
-      if (effectiveRole === "rd") {
-        setManageOptionsRd(nextRoleOptions);
-        void saveOptionsForRole("rd", nextRoleOptions);
-      } else {
-        setManageOptionsPm(nextRoleOptions);
-        void saveOptionsForRole("pm", nextRoleOptions);
-      }
+  // pm 和 rd 都儲存相同選項，確保所有角色都能看到
+  const buildNextOptions = (current: OptionsByHeader) => {
+    const next = { ...current };
+    if (oldHeader && oldHeader !== nextHeader) delete next[oldHeader];
+    if (schemaFieldTypeDraft === "select") {
+      next[nextHeader] = nextOptions;
+    } else {
+      delete next[nextHeader];
     }
+    return next;
+  };
+
+  const nextPmOptions = buildNextOptions(manageOptionsPm);
+  const nextRdOptions = buildNextOptions(manageOptionsRd);
+
+  void (async () => {
+    await saveOptionsForRole("pm", nextPmOptions);
+    await saveOptionsForRole("rd", nextRdOptions);
+  })();
+}
 
     resetSchemaFieldDraft();
     void persistSchema(nextDraft, nextTypes);
