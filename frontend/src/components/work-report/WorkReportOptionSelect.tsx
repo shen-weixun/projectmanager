@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
+
 import WorkReportOptionPill from '@/components/work-report/WorkReportOptionPill'
 import type { WorkReportOptionItem } from '@/utils/workReportOptions'
 
@@ -18,6 +19,7 @@ export default function WorkReportOptionSelect({
 }: Props) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const selected = options.find((option) => option.value === value)
 
   useEffect(() => {
     if (!open) return
@@ -30,33 +32,35 @@ export default function WorkReportOptionSelect({
     return () => window.removeEventListener('mousedown', handlePointerDown)
   }, [open])
 
-  const selected = options.find((opt) => opt.value === value)
-
   if (disabled) {
-    if (!value) {
-      return <span className="text-slate-400 text-sm p-1.5">—</span>
+    if (!selected) {
+      return (
+        <div className="min-h-10 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-400">
+          請選擇
+        </div>
+      )
     }
     return (
-      <WorkReportOptionPill
-        label={value}
-        color={selected?.color ?? 'slate'}
-      />
+      <div className="min-h-10 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
+        <WorkReportOptionPill label={selected.value} color={selected.color} />
+      </div>
     )
   }
 
   return (
-    <div ref={rootRef} className="relative w-full min-w-[120px]">
+    <div ref={rootRef} className="relative w-full">
       <button
         type="button"
+        disabled={disabled}
         onClick={() => setOpen((prev) => !prev)}
-        className={`flex w-full items-center justify-between gap-2 rounded-lg border bg-white px-2 py-1.5 text-left transition ${
-          open ? 'border-blue-400 ring-2 ring-blue-200' : 'border-slate-200 hover:border-slate-300'
+        className={`flex min-h-10 w-full items-center justify-between gap-2 rounded-md border bg-white px-2 py-1.5 text-left transition disabled:cursor-not-allowed disabled:bg-slate-50 disabled:opacity-80 ${
+          open ? 'border-blue-400 ring-2 ring-blue-200' : 'border-slate-300 hover:border-slate-400'
         }`}
       >
         {selected ? (
           <WorkReportOptionPill label={selected.value} color={selected.color} />
         ) : (
-          <span className="flex-1" />
+          <span className="px-1 text-sm text-slate-400">請選擇</span>
         )}
         <ChevronDown
           size={16}
@@ -65,22 +69,26 @@ export default function WorkReportOptionSelect({
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 z-50 mt-1 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              className={`flex w-full items-center px-2 py-2 text-left hover:bg-slate-50 ${
-                opt.value === value ? 'bg-blue-50/60' : ''
-              }`}
-              onClick={() => {
-                onChange(opt.value)
-                setOpen(false)
-              }}
-            >
-              <WorkReportOptionPill label={opt.value} color={opt.color} />
-            </button>
-          ))}
+        <div className="absolute left-0 right-0 z-50 mt-1 max-h-56 overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          {options.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-slate-400">沒有可選項目</div>
+          ) : (
+            options.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={`flex w-full items-center px-2 py-2 text-left hover:bg-slate-50 ${
+                  option.value === value ? 'bg-blue-50/70' : ''
+                }`}
+                onClick={() => {
+                  onChange(option.value)
+                  setOpen(false)
+                }}
+              >
+                <WorkReportOptionPill label={option.value} color={option.color} />
+              </button>
+            ))
+          )}
         </div>
       )}
     </div>

@@ -1,153 +1,97 @@
-import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
-import WorkReportOptionPill from '@/components/work-report/WorkReportOptionPill'
-import WorkReportOptionSelect from '@/components/work-report/WorkReportOptionSelect'
-import type { WorkReportOptionItem } from '@/utils/workReportOptions'
-import {
-  OPTION_COLOR_STYLES,
-  WORK_REPORT_OPTION_COLORS,
-  normalizeOptionColor,
-  normalizeOptionsList,
-} from '@/utils/workReportOptions'
+import { useMemo } from "react";
+import { Plus, X } from "lucide-react";
+
+import type { WorkReportOptionItem } from "@/utils/workReportOptions";
+import { normalizeOptionsList } from "@/utils/workReportOptions";
+import WorkReportOptionSelect from "@/components/work-report/WorkReportOptionSelect";
 
 type Props = {
-  header: string
-  roleLabel: string
-  options: WorkReportOptionItem[]
-  onChange: (options: WorkReportOptionItem[]) => void
-}
+  header: string;
+  options: WorkReportOptionItem[];
+  onChange: (options: WorkReportOptionItem[]) => void;
+};
 
 export default function WorkReportOptionsEditorPanel({
   header,
-  roleLabel,
   options,
   onChange,
 }: Props) {
-  const [newValue, setNewValue] = useState('')
-  const [newColor, setNewColor] = useState<WorkReportOptionItem['color']>('slate')
-  const [previewValue, setPreviewValue] = useState('')
+  const normalizedOptions = useMemo(() => {
+    const normalized = normalizeOptionsList(options);
+    return normalized.length > 0 ? normalized : [{ value: "", color: "slate" as const }];
+  }, [options]);
+
+  const updateOption = (index: number, value: string) => {
+    const next = normalizedOptions.map((option, optionIndex) =>
+      optionIndex === index ? { ...option, value } : option
+    );
+    onChange(next);
+  };
+
+  const removeOption = (index: number) => {
+    const next = normalizedOptions.filter((_, optionIndex) => optionIndex !== index);
+    onChange(next.length > 0 ? next : []);
+  };
 
   const addOption = () => {
-    const value = newValue.trim()
-    if (!value) return
-    if (options.some((opt) => opt.value === value)) {
-      alert('此選項已存在')
-      return
-    }
-    const next = [...options, { value, color: newColor }]
-    onChange(next)
-    setNewValue('')
-    setPreviewValue(value)
-  }
+    onChange([...normalizedOptions, { value: "", color: "slate" }]);
+  };
 
-  const removeOption = (value: string) => {
-    onChange(options.filter((opt) => opt.value !== value))
-    if (previewValue === value) setPreviewValue('')
-  }
-
-  const updateOptionColor = (value: string, color: WorkReportOptionItem['color']) => {
-    onChange(options.map((opt) => (opt.value === value ? { ...opt, color } : opt)))
-  }
+  const previewOptions = normalizeOptionsList(normalizedOptions);
+  const previewValue = previewOptions[0]?.value ?? "";
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-sm font-bold text-slate-800">{header}</p>
-          <p className="text-xs text-slate-500">{roleLabel} 下拉選單選項</p>
-        </div>
-        <div className="text-xs text-slate-400">共 {options.length} 項</div>
+    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-4">
+      <div>
+        <p className="text-sm font-bold text-slate-800">{header}</p>
+        <p className="mt-1 text-xs text-slate-500">
+          請直接設定這個下拉欄位可選的項目。
+        </p>
       </div>
 
-      <div className="flex flex-wrap gap-2 min-h-[32px]">
-        {options.length === 0 ? (
-          <span className="text-xs text-slate-400">尚未建立選項</span>
-        ) : (
-          options.map((opt) => (
-            <div
-              key={opt.value}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-100 bg-slate-50 pl-1 pr-1 py-0.5"
+      <div className="space-y-2">
+        {normalizedOptions.map((option, index) => (
+          <div key={`${option.value}-${index}`} className="flex items-center gap-2">
+            <input
+              value={option.value}
+              onChange={(event) => updateOption(index, event.target.value)}
+              placeholder="輸入選項名稱"
+              className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+            <button
+              type="button"
+              onClick={() => removeOption(index)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 text-slate-500 hover:bg-white"
+              aria-label="刪除選項"
             >
-              <WorkReportOptionPill label={opt.value} color={opt.color} />
-              <div className="flex items-center gap-0.5 px-1">
-                {WORK_REPORT_OPTION_COLORS.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    title={`設為 ${color}`}
-                    onClick={() => updateOptionColor(opt.value, color)}
-                    className={`h-5 w-5 rounded-md border border-white shadow-sm ring-1 transition ${
-                      opt.color === color ? 'ring-slate-800 scale-110' : 'ring-transparent opacity-90'
-                    } ${OPTION_COLOR_STYLES[color].bg}`}
-                  />
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={() => removeOption(opt.value)}
-                className="p-1 text-slate-400 hover:text-red-600"
-                aria-label="刪除選項"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))
-        )}
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
       </div>
 
-      <div className="flex flex-wrap items-end gap-2 border-t border-slate-100 pt-3">
-        <div className="flex-1 min-w-[160px]">
-          <label className="block text-xs font-semibold text-slate-600 mb-1">新增選項</label>
-          <input
-            type="text"
-            value={newValue}
-            onChange={(e) => setNewValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                addOption()
-              }
-            }}
-            placeholder="例如：開發、測試、完成"
-            className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">標籤顏色</label>
-          <select
-            value={newColor}
-            onChange={(e) => setNewColor(normalizeOptionColor(e.target.value))}
-            className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm min-w-[100px]"
-          >
-            {WORK_REPORT_OPTION_COLORS.map((color) => (
-              <option key={color} value={color}>
-                {color}
-              </option>
-            ))}
-          </select>
-        </div>
-        <button
-          type="button"
-          onClick={addOption}
-          className="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-900"
-        >
-          <Plus size={14} />
-          新增
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={addOption}
+        className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+      >
+        <Plus className="h-4 w-4" />
+        新增選項
+      </button>
 
-      {options.length > 0 && (
-        <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/80 p-3">
-          <p className="text-xs font-semibold text-slate-600 mb-2">預覽（填寫時樣式）</p>
+      {previewOptions.length > 0 && (
+        <div className="rounded-lg border border-dashed border-slate-200 bg-white p-3">
+          <p className="mb-2 text-xs font-semibold text-slate-600">下拉預覽</p>
           <div className="max-w-xs">
             <WorkReportOptionSelect
-              options={normalizeOptionsList(options)}
+              options={previewOptions}
               value={previewValue}
-              onChange={setPreviewValue}
+              onChange={() => {}}
+              disabled
             />
           </div>
         </div>
       )}
     </div>
-  )
+  );
 }
