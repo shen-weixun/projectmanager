@@ -73,10 +73,18 @@ const UserProfileSetting = () => {
     return ((form.fontScale - 0.8) / (1.5 - 0.8)) * 100
   }, [form.fontScale])
 
-  const updateFontScale = (value: number) => {
-    const nextScale = normalizeFontScale(value)
-    setForm((prev) => ({ ...prev, fontScale: nextScale }))
-  }
+const updateFontScale = (value: number) => {
+  const nextScale = normalizeFontScale(value)
+
+  setForm((prev) => ({
+    ...prev,
+    fontScale: nextScale,
+  }))
+
+  // 拖拉時立即套用到畫面，讓使用者同步預覽
+  // persist: false 表示先不要存到 localStorage，等按「儲存變更」後再正式保存
+  applyFontScale(nextScale, { persist: false })
+}
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()

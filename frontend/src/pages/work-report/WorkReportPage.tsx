@@ -1666,28 +1666,41 @@ export default function WorkReportPage({
 
 
 
-            tables: block.tables.map((table) => ({
+tables: block.tables.map((table) => {
+  const headers =
+    table.table_data?.headers?.length > 0
+      ? table.table_data.headers
+      : apiHeaders;
 
+  const rows =
+    table.table_data?.rows?.length > 0
+      ? table.table_data.rows
+      : [
+          headers.reduce<Record<string, string>>((acc, header) => {
+            const fieldType = normalizeWorkReportFieldType(
+              schemaFieldTypes[header]
+            );
 
+            const shouldAutoFillDate =
+              reportType === "daily" &&
+              (fieldType === "date" || header.includes("日期"));
 
+            return {
+              ...acc,
+              [header]: shouldAutoFillDate ? periodKey : "",
+            };
+          }, {}),
+        ];
 
-
-
-              ...table,
-
-
-
-
-
-
-              read_only: viewingCurrentWeek ? false : table.read_only,
-
-
-
-
-
-
-            })),
+  return {
+    ...table,
+    read_only: viewingCurrentWeek ? false : table.read_only,
+    table_data: {
+      headers,
+      rows: getDateAutoFilledRows(headers, rows),
+    },
+  };
+}),
 
 
 
@@ -2367,7 +2380,30 @@ const saveOptionsForRole = async (
 
   };
 
+const getDateAutoFilledRows = (
+  headers: string[],
+  rows: Record<string, string>[]
+) => {
+  if (reportType !== "daily") return rows;
 
+  return rows.map((row, rowIndex) => {
+    if (rowIndex !== 0) return row;
+
+    return headers.reduce<Record<string, string>>((acc, header) => {
+      const fieldType = normalizeWorkReportFieldType(schemaFieldTypes[header]);
+
+      const shouldAutoFillDate =
+        fieldType === "date" || header.includes("日期");
+
+      return {
+        ...acc,
+        [header]: shouldAutoFillDate
+          ? row[header] || periodKey
+          : row[header] || "",
+      };
+    }, {});
+  });
+};
 
 
 
