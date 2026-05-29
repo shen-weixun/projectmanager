@@ -4,6 +4,8 @@ import {
   Boxes,
   ChevronDown,
   ChevronRight,
+  Eye,
+  EyeOff,
   FileText,
   FolderKanban,
   Handshake,
@@ -16,75 +18,112 @@ import {
 
 import { getRoleKey, LEAD_MANAGEMENT_ROLE_KEYS } from '@/utils/auth'
 
+const SIDEBAR_HIDDEN_ITEMS_KEY = 'sidebarHiddenItems'
+const SIDEBAR_MANAGER_ROLE_KEYS = ['super', 'boss'] as const
+
+type ChildMenuItem = {
+  key: string
+  path: string
+  label: string
+}
+
 type MenuItem =
   | {
+      key: string
       path: string
       label: string
       icon: ReactNode
       allowedRoleKeys?: readonly string[]
     }
   | {
+      key: string
       label: string
       icon: ReactNode
-      children: { path: string; label: string }[]
+      children: ChildMenuItem[]
       allowedRoleKeys?: readonly string[]
     }
 
 const menuItems: MenuItem[] = [
-  { path: '/', label: '首頁', icon: <Home size={20} /> },
+  { key: 'home', path: '/', label: '首頁', icon: <Home size={20} /> },
   {
+    key: 'lead-management',
     path: '/lead-management',
     label: '洽案管理',
     icon: <Handshake size={20} />,
     allowedRoleKeys: LEAD_MANAGEMENT_ROLE_KEYS,
   },
   {
+    key: 'project-management',
     path: '/project-management',
     label: '專案管理',
     icon: <FolderKanban size={20} />,
   },
   {
+    key: 'work-report',
     label: '工作紀錄',
     icon: <FileText size={20} />,
     children: [
-      { path: '/work-report/daily', label: '每日工作紀錄' },
-      { path: '/work-report/weekly', label: '每週工作紀錄' },
+      { key: 'work-report-daily', path: '/work-report/daily', label: '每日工作紀錄' },
+      { key: 'work-report-weekly', path: '/work-report/weekly', label: '每週工作紀錄' },
     ],
   },
   {
+    key: 'asset-inventory',
     path: '/asset-inventory',
     label: '資財管理',
     icon: <Boxes size={20} />,
   },
   {
+    key: 'material-inventory',
     path: '/material-inventory',
     label: '材料盤點',
     icon: <Package size={20} />,
   },
-  { path: '/settings', label: '設定', icon: <Settings size={20} /> },
+  { key: 'settings', path: '/settings', label: '設定', icon: <Settings size={20} /> },
 ]
+
+const readHiddenItems = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SIDEBAR_HIDDEN_ITEMS_KEY) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter((value) => typeof value === 'string') : []
+  } catch {
+    return []
+  }
+}
 
 const Sidebar = () => {
   const location = useLocation()
   const roleKey = getRoleKey()
+  const canManageSidebar = SIDEBAR_MANAGER_ROLE_KEYS.includes(
+    (roleKey ?? '') as (typeof SIDEBAR_MANAGER_ROLE_KEYS)[number]
+  )
   const [collapsed, setCollapsed] = useState(false)
   const [showLabels, setShowLabels] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [hiddenItemKeys, setHiddenItemKeys] = useState<string[]>(readHiddenItems)
   const [workReportOpen, setWorkReportOpen] = useState(
     location.pathname.startsWith('/work-report')
   )
 
+  const hiddenKeySet = useMemo(() => new Set(hiddenItemKeys), [hiddenItemKeys])
+
   const visibleMenuItems = useMemo(
     () =>
       menuItems.filter((item) => {
-        if (!item.allowedRoleKeys) return true
-        return roleKey ? item.allowedRoleKeys.includes(roleKey) : false
+        if (item.allowedRoleKeys && (!roleKey || !item.allowedRoleKeys.includes(roleKey))) {
+          return false
+        }
+        return canManageSidebar || !hiddenKeySet.has(item.key)
       }),
-    [roleKey]
+    [canManageSidebar, hiddenKeySet, roleKey]
   )
 
   const isActive = (path: string) => location.pathname === path
   const isWorkReportActive = location.pathname.startsWith('/work-report')
+
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_HIDDEN_ITEMS_KEY, JSON.stringify(hiddenItemKeys))
+  }, [hiddenItemKeys])
 
   useEffect(() => {
     setMobileOpen(false)
@@ -113,44 +152,97 @@ const Sidebar = () => {
     setCollapsed(true)
   }
 
+  const toggleHiddenItem = (key: string) => {
+    setHiddenItemKeys((current) =>
+      current.includes(key) ? current.filter((itemKey) => itemKey !== key) : [...current, key]
+    )
+  }
+
+  const renderVisibilityButton = (key: string, label: string, mobile = false) => {
+    if (!canManageSidebar) return null
+
+    const hidden = hiddenKeySet.has(key)
+    const Icon = hidden ? EyeOff : Eye
+
+    return (
+      <button
+        type="button"
+        className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-gray-300 hover:bg-gray-700 hover:text-white ${
+          mobile ? 'mr-1' : ''
+        }`}
+        title={hidden ? `顯示「${label}」` : `隱藏「${label}」`}
+        aria-label={hidden ? `顯示「${label}」` : `隱藏「${label}」`}
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          toggleHiddenItem(key)
+        }}
+      >
+        <Icon size={16} />
+      </button>
+    )
+  }
+
   const renderNavLink = (
+    key: string,
     path: string,
     label: string,
     icon?: ReactNode,
     nested = false
-  ) => (
-    <Link
-      key={path}
-      to={path}
-      title={collapsed ? label : undefined}
-      onClick={() => setMobileOpen(false)}
-      className={`flex min-h-11 items-center rounded-md hover:bg-gray-700 ${
-        nested && !collapsed ? 'pl-9 pr-3' : collapsed ? 'justify-center px-2' : 'space-x-2 px-3'
-      } ${isActive(path) ? 'bg-gray-700 font-bold' : ''}`}
-    >
-      {icon}
-      {showLabels && !collapsed && (
-        <span className={`text-sm ${nested ? 'text-gray-300' : ''}`}>{label}</span>
-      )}
-    </Link>
-  )
-
-  const renderMenuItem = (item: MenuItem) => {
-    if ('path' in item) {
-      return renderNavLink(item.path, item.label, item.icon)
-    }
-
-    const groupActive = isWorkReportActive
+  ) => {
+    const hidden = hiddenKeySet.has(key)
 
     if (collapsed) {
       return (
         <Link
-          key="work-report"
+          key={key}
+          to={path}
+          title={label}
+          onClick={() => setMobileOpen(false)}
+          className={`flex min-h-11 items-center justify-center rounded-md px-2 hover:bg-gray-700 ${
+            isActive(path) ? 'bg-gray-700 font-bold' : ''
+          } ${hidden ? 'opacity-50' : ''}`}
+        >
+          {icon}
+        </Link>
+      )
+    }
+
+    return (
+      <div key={key} className={`flex items-center gap-1 ${hidden ? 'opacity-60' : ''}`}>
+        <Link
+          to={path}
+          title={label}
+          onClick={() => setMobileOpen(false)}
+          className={`flex min-h-11 min-w-0 flex-1 items-center rounded-md hover:bg-gray-700 ${
+            nested ? 'pl-9 pr-3' : 'space-x-2 px-3'
+          } ${isActive(path) ? 'bg-gray-700 font-bold' : ''}`}
+        >
+          {icon}
+          {showLabels && <span className={`truncate text-sm ${nested ? 'text-gray-300' : ''}`}>{label}</span>}
+        </Link>
+        {renderVisibilityButton(key, label)}
+      </div>
+    )
+  }
+
+  const renderMenuItem = (item: MenuItem) => {
+    if ('path' in item) {
+      return renderNavLink(item.key, item.path, item.label, item.icon)
+    }
+
+    const groupActive = isWorkReportActive
+    const groupHidden = hiddenKeySet.has(item.key)
+
+    if (collapsed) {
+      return (
+        <Link
+          key={item.key}
           to="/work-report/daily"
-          title="工作紀錄"
+          title={item.label}
           className={`flex min-h-11 items-center justify-center rounded-md px-2 hover:bg-gray-700 ${
             groupActive ? 'bg-gray-700 font-bold' : ''
-          }`}
+          } ${groupHidden ? 'opacity-50' : ''}`}
         >
           {item.icon}
         </Link>
@@ -158,25 +250,28 @@ const Sidebar = () => {
     }
 
     return (
-      <div key="work-report-group" className="space-y-1">
-        <button
-          type="button"
-          onClick={() => setWorkReportOpen((prev) => !prev)}
-          className={`flex min-h-11 w-full items-center justify-between rounded-md px-3 hover:bg-gray-700 ${
-            groupActive ? 'bg-gray-700/60 font-bold' : ''
-          }`}
-        >
-          <span className="flex items-center space-x-2">
-            {item.icon}
-            {showLabels && <span className="text-sm">{item.label}</span>}
-          </span>
-          {showLabels &&
-            (workReportOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />)}
-        </button>
+      <div key={item.key} className={`space-y-1 ${groupHidden ? 'opacity-60' : ''}`}>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setWorkReportOpen((prev) => !prev)}
+            className={`flex min-h-11 min-w-0 flex-1 items-center justify-between rounded-md px-3 hover:bg-gray-700 ${
+              groupActive ? 'bg-gray-700/60 font-bold' : ''
+            }`}
+          >
+            <span className="flex min-w-0 items-center space-x-2">
+              {item.icon}
+              {showLabels && <span className="truncate text-sm">{item.label}</span>}
+            </span>
+            {showLabels &&
+              (workReportOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />)}
+          </button>
+          {renderVisibilityButton(item.key, item.label)}
+        </div>
         {workReportOpen &&
-          item.children.map((child) =>
-            renderNavLink(child.path, child.label, undefined, true)
-          )}
+          item.children
+            .filter((child) => canManageSidebar || !hiddenKeySet.has(child.key))
+            .map((child) => renderNavLink(child.key, child.path, child.label, undefined, true))}
       </div>
     )
   }
@@ -185,7 +280,7 @@ const Sidebar = () => {
     <div className="relative select-none">
       <button
         className="fixed left-3 top-[4.5rem] z-50 text-gray-800 md:hidden"
-        aria-label={mobileOpen ? '關閉選單' : '開啟選單'}
+        aria-label={mobileOpen ? '關閉側邊欄' : '開啟側邊欄'}
         onClick={() => setMobileOpen(!mobileOpen)}
       >
         {mobileOpen ? <X size={24} /> : <Menu size={24} />}
@@ -193,7 +288,7 @@ const Sidebar = () => {
       {mobileOpen && (
         <button
           className="fixed inset-0 top-16 z-30 bg-black/20 md:hidden"
-          aria-label="關閉選單遮罩"
+          aria-label="關閉側邊欄遮罩"
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -201,44 +296,73 @@ const Sidebar = () => {
         className={`fixed left-0 top-16 z-40 h-full w-56 transform bg-gray-800 p-4 text-white shadow-lg transition-transform md:hidden ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="mb-4 flex justify-end">
-          <button onClick={() => setMobileOpen(false)} aria-label="關閉選單">
+          <button onClick={() => setMobileOpen(false)} aria-label="關閉側邊欄">
             <X size={24} />
           </button>
         </div>
         <nav className="flex flex-col space-y-2">
           {visibleMenuItems.map((item) => {
             if ('path' in item) {
+              const hidden = hiddenKeySet.has(item.key)
+
               return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => setMobileOpen(false)}
-                  className={`flex items-center space-x-2 rounded-md px-3 py-2.5 hover:bg-gray-700 ${
-                    isActive(item.path) ? 'bg-gray-700 font-bold' : ''
-                  }`}
-                >
-                  {item.icon}
-                  <span className="text-sm">{item.label}</span>
-                </Link>
-              )
-            }
-            return (
-              <div key="work-report-mobile" className="space-y-1">
-                <p className="px-3 py-1 text-xs uppercase tracking-wide text-gray-400">
-                  {item.label}
-                </p>
-                {item.children.map((child) => (
+                <div key={item.key} className={`flex items-center gap-1 ${hidden ? 'opacity-60' : ''}`}>
                   <Link
-                    key={child.path}
-                    to={child.path}
+                    to={item.path}
                     onClick={() => setMobileOpen(false)}
-                    className={`flex rounded-md py-2 pl-8 pr-3 text-sm hover:bg-gray-700 ${
-                      isActive(child.path) ? 'bg-gray-700 font-bold' : ''
+                    className={`flex min-w-0 flex-1 items-center space-x-2 rounded-md px-3 py-2.5 hover:bg-gray-700 ${
+                      isActive(item.path) ? 'bg-gray-700 font-bold' : ''
                     }`}
                   >
-                    {child.label}
+                    {item.icon}
+                    <span className="truncate text-sm">{item.label}</span>
                   </Link>
-                ))}
+                  {renderVisibilityButton(item.key, item.label, true)}
+                </div>
+              )
+            }
+
+            const hidden = hiddenKeySet.has(item.key)
+
+            return (
+              <div key={item.key} className={`space-y-1 ${hidden ? 'opacity-60' : ''}`}>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setWorkReportOpen((prev) => !prev)}
+                    className="flex min-w-0 flex-1 items-center justify-between rounded-md px-3 py-2 hover:bg-gray-700"
+                  >
+                    <span className="truncate text-xs uppercase tracking-wide text-gray-400">
+                      {item.label}
+                    </span>
+                    {workReportOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  </button>
+                  {renderVisibilityButton(item.key, item.label, true)}
+                </div>
+                {workReportOpen &&
+                  item.children
+                    .filter((child) => canManageSidebar || !hiddenKeySet.has(child.key))
+                    .map((child) => {
+                      const childHidden = hiddenKeySet.has(child.key)
+
+                      return (
+                        <div
+                          key={child.key}
+                          className={`flex items-center gap-1 ${childHidden ? 'opacity-60' : ''}`}
+                        >
+                          <Link
+                            to={child.path}
+                            onClick={() => setMobileOpen(false)}
+                            className={`flex min-w-0 flex-1 rounded-md py-2 pl-8 pr-3 text-sm hover:bg-gray-700 ${
+                              isActive(child.path) ? 'bg-gray-700 font-bold' : ''
+                            }`}
+                          >
+                            <span className="truncate">{child.label}</span>
+                          </Link>
+                          {renderVisibilityButton(child.key, child.label, true)}
+                        </div>
+                      )
+                    })}
               </div>
             )
           })}
