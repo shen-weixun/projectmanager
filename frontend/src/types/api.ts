@@ -1,4 +1,4 @@
-// 登入成功或失敗後端回應。
+﻿// 登入成功或失敗後端回應。
 export interface LoginResponse {
     status: number;
     token?: string;
@@ -251,7 +251,12 @@ export interface UserListItem {
     job_title?: string;
 }
 
-// 財產清單項目，包含數量、保管人、位置與最後取出資訊。
+export interface AssetNameOption {
+    id: number;
+    value: string;
+}
+
+// 財產清單項目，包含數量、保管人、位置與最後移管資訊。
 export interface AssetItem {
     id: number;
     name: string;
@@ -260,8 +265,14 @@ export interface AssetItem {
     availableQuantity?: number;
     unit?: string;
     status?: string;
+    keeperUserId?: number | null;
     keeper: string;
     location: string;
+    brand?: string;
+    model?: string;
+    serialNumber?: string;
+    assetPrice?: string;
+    expiryDate?: string;
     lastWithdrawBy: string | null;
     note?: string;
     createdAt?: string;
@@ -269,7 +280,7 @@ export interface AssetItem {
     [key: string]: unknown;
 }
 
-// 財產取出紀錄。
+// 財產移管紀錄。
 export interface AssetWithdrawRecord {
     id: number;
     assetId: number;
@@ -289,17 +300,69 @@ export interface AssetPayload {
     availableQuantity?: number;
     unit?: string;
     status?: string;
-    keeper?: string;
-    location?: string;
+    keeperUserId: number;
+    location: string;
+    brand?: string;
+    model?: string;
+    serialNumber?: string;
+    assetPrice?: string;
+    expiryDate?: string;
     note?: string;
     [key: string]: unknown;
 }
 
-// 財產取出請求資料。
+// 財產移管請求資料。
 export interface WithdrawAssetPayload {
     id: number;
     quantity: number;
-    withdrawer: string;
+    transferUserId: number;
+}
+
+export interface MaterialItem {
+    id: number;
+    name: string;
+    quantity: number;
+    keeperUserId?: number | null;
+    keeper: string;
+    location: string;
+    brand?: string;
+    model?: string;
+    serialNumber?: string;
+    assetPrice?: string;
+    expiryDate?: string;
+    lastTransferBy: string | null;
+    updatedAt: string;
+    [key: string]: unknown;
+}
+
+export interface MaterialTransferRecord {
+    id: number;
+    materialId: number;
+    materialName: string;
+    quantity: number;
+    transferBy: string;
+    location: string;
+    createdAt: string;
+    [key: string]: unknown;
+}
+
+export interface MaterialPayload {
+    name: string;
+    quantity: number;
+    keeperUserId: number;
+    location: string;
+    brand?: string;
+    model?: string;
+    serialNumber?: string;
+    assetPrice?: string;
+    expiryDate?: string;
+    [key: string]: unknown;
+}
+
+export interface TransferMaterialPayload {
+    id: number;
+    quantity: number;
+    transferUserId: number;
 }
 
 // 部門管理列表資料。

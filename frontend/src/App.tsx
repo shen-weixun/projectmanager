@@ -9,6 +9,8 @@ import LoginPage from '@/pages/Login'
 import HomePage from '@/pages/home'
 import AssetInventoryPage from '@/pages/asset/AssetInventory'
 import AssetWithdrawRecordsPage from '@/pages/asset/AssetWithdrawRecords'
+import MaterialInventoryPage from '@/pages/material/MaterialInventory'
+import MaterialTransferRecordsPage from '@/pages/material/MaterialTransferRecords'
 import LeadManagementPage from '@/pages/lead/LeadManagement'
 import ProjectManagementPage from '@/pages/project/ProjectManagement'
 import ProjectDetailPage from '@/pages/project/ProjectDetail'
@@ -58,6 +60,8 @@ function App() {
             <Route path="work-report/weekly" element={<WeeklyWorkRecord />} />
             <Route path="asset-inventory" element={<AssetInventoryPage />} />
             <Route path="asset-inventory/withdraw-records" element={<AssetWithdrawRecordsPage />} />
+            <Route path="material-inventory" element={<MaterialInventoryPage />} />
+            <Route path="material-inventory/transfer-records" element={<MaterialTransferRecordsPage />} />
             <Route path="settings" element={<SettingsPage />}>
                <Route index element={<Navigate to="profile" replace />} />
                <Route path="profile" element={<UserProfileSetting />} />

@@ -23,7 +23,7 @@ class User(Base, TimestampMixin):
         String(255), nullable=True, comment="address"
     )
     font_scale: Mapped[float] = mapped_column(
-        Float, nullable=False, default=1.0, server_default="1.0", comment="UI font scale"
+        Float, nullable=False, default=1.1, server_default="1.1", comment="UI font scale"
     )
     token_version: Mapped[int] = mapped_column(
         nullable=False, default=0, comment="JWT token version"

@@ -9,6 +9,7 @@ import {
   Handshake,
   Home,
   Menu,
+  Package,
   Settings,
   X,
 } from 'lucide-react'
@@ -52,8 +53,13 @@ const menuItems: MenuItem[] = [
   },
   {
     path: '/asset-inventory',
-    label: '資產盤點',
+    label: '資財管理',
     icon: <Boxes size={20} />,
+  },
+  {
+    path: '/material-inventory',
+    label: '材料盤點',
+    icon: <Package size={20} />,
   },
   { path: '/settings', label: '設定', icon: <Settings size={20} /> },
 ]

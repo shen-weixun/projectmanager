@@ -1,12 +1,11 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { getAssetWithdrawRecordsAPI } from '@/services/apis'
-import type { AssetWithdrawRecord } from '@/types/api'
+import { getMaterialTransferRecordsAPI } from '@/services/apis'
+import type { MaterialTransferRecord } from '@/types/api'
 
-// 將後端時間字串轉成台灣使用者可讀的日期時間格式。
 const formatDateTime = (value: string) =>
   new Intl.DateTimeFormat('zh-TW', {
     year: 'numeric',
@@ -16,38 +15,34 @@ const formatDateTime = (value: string) =>
     minute: '2-digit',
   }).format(new Date(value))
 
-const AssetWithdrawRecordsPage = () => {
-  // 管理移管紀錄清單、載入狀態與搜尋關鍵字。
-  const [records, setRecords] = useState<AssetWithdrawRecord[]>([])
+const MaterialTransferRecordsPage = () => {
+  const [records, setRecords] = useState<MaterialTransferRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchKeyword, setSearchKeyword] = useState('')
 
   useEffect(() => {
-    // 初次進入頁面時載入所有資產移管紀錄。
     const loadRecords = async () => {
       setIsLoading(true)
-      const response = await getAssetWithdrawRecordsAPI()
+      const response = await getMaterialTransferRecordsAPI()
       if (response.status === 0) {
         setRecords(response.data)
       }
       setIsLoading(false)
     }
-    loadRecords()
+    void loadRecords()
   }, [])
 
-  // 依搜尋關鍵字過濾物品名稱、移管人與存放位置。
   const filteredRecords = useMemo(() => {
     const keyword = searchKeyword.trim().toLowerCase()
     if (!keyword) return records
     return records.filter((record) =>
-      [record.assetName, record.withdrawer, record.location].some((value) =>
+      [record.materialName, record.transferBy, record.location].some((value) =>
         value.toLowerCase().includes(keyword)
       )
     )
   }, [records, searchKeyword])
 
-  // 統計所有移管紀錄的總移管數量。
-  const totalWithdrawn = useMemo(
+  const totalTransferred = useMemo(
     () => records.reduce((sum, record) => sum + record.quantity, 0),
     [records]
   )
@@ -58,16 +53,16 @@ const AssetWithdrawRecordsPage = () => {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <Link to="/asset-inventory">
+              <Link to="/material-inventory">
                 <Button variant="ghost" size="sm" className="gap-1.5 text-gray-600 hover:text-gray-800">
                   <ArrowLeft className="h-4 w-4" />
-                  返回資財清單
+                  返回材料清單
                 </Button>
               </Link>
             </div>
-            <h1 className="mt-2 text-2xl font-bold text-gray-800">移管紀錄</h1>
+            <h1 className="mt-2 text-2xl font-bold text-gray-800">材料移管紀錄</h1>
             <p className="mt-2 text-base text-gray-600">
-              查看所有資產的移管紀錄，可依物品名稱、移管人或存放位置搜尋。
+              查看所有材料的移管紀錄，可依材料名稱、移管人或存放位置搜尋。
             </p>
           </div>
           <div className="grid min-w-[220px] grid-cols-2 gap-3">
@@ -77,7 +72,7 @@ const AssetWithdrawRecordsPage = () => {
             </div>
             <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-3">
               <p className="text-sm font-medium text-gray-500">總移管數量</p>
-              <p className="mt-1 text-2xl font-bold text-gray-800">{totalWithdrawn}</p>
+              <p className="mt-1 text-2xl font-bold text-gray-800">{totalTransferred}</p>
             </div>
           </div>
         </div>
@@ -89,9 +84,9 @@ const AssetWithdrawRecordsPage = () => {
           <div className="relative w-full max-w-sm">
             <Input
               value={searchKeyword}
-              onChange={(e) => setSearchKeyword(e.target.value)}
+              onChange={(event) => setSearchKeyword(event.target.value)}
               className="h-9 rounded-full bg-white pl-10 pr-10 text-base font-medium text-gray-800 placeholder:text-gray-400"
-              placeholder="搜尋物品名稱、移管人或位置"
+              placeholder="搜尋材料名稱、移管人或位置"
             />
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             {searchKeyword ? (
@@ -115,7 +110,7 @@ const AssetWithdrawRecordsPage = () => {
               <thead>
                 <tr className="bg-gray-50 text-gray-900">
                   <th className="w-[18%] border border-gray-300 px-3 py-2 text-base font-semibold">
-                    物品名稱
+                    材料名稱
                   </th>
                   <th className="w-[10%] border border-gray-300 px-3 py-2 text-base font-semibold">
                     移管數量
@@ -134,26 +129,21 @@ const AssetWithdrawRecordsPage = () => {
               <tbody>
                 {filteredRecords.length === 0 ? (
                   <tr>
-                    <td
-                      className="border border-gray-300 px-3 py-8 text-center text-gray-500"
-                      colSpan={5}
-                    >
-                      {records.length === 0
-                        ? '尚無任何移管紀錄'
-                        : '查無符合條件的紀錄'}
+                    <td className="border border-gray-300 px-3 py-8 text-center text-gray-500" colSpan={5}>
+                      {records.length === 0 ? '尚無任何材料移管紀錄' : '查無符合條件的紀錄'}
                     </td>
                   </tr>
                 ) : (
                   filteredRecords.map((record) => (
                     <tr key={record.id} className="hover:bg-gray-50/70">
                       <td className="border border-gray-300 px-3 py-2.5 font-medium">
-                        {record.assetName}
+                        {record.materialName}
                       </td>
                       <td className="border border-gray-300 px-3 py-2.5 text-center">
                         {record.quantity}
                       </td>
                       <td className="border border-gray-300 px-3 py-2.5">
-                        {record.withdrawer}
+                        {record.transferBy}
                       </td>
                       <td className="border border-gray-300 px-3 py-2.5">
                         {record.location}
@@ -171,9 +161,7 @@ const AssetWithdrawRecordsPage = () => {
 
         {!isLoading && filteredRecords.length > 0 && (
           <div className="mt-4 text-sm text-gray-500">
-            {searchKeyword
-              ? `找到 ${filteredRecords.length} 筆符合的紀錄`
-              : `共 ${records.length} 筆紀錄`}
+            {searchKeyword ? `找到 ${filteredRecords.length} 筆符合的紀錄` : `共 ${records.length} 筆紀錄`}
           </div>
         )}
       </section>
@@ -181,4 +169,4 @@ const AssetWithdrawRecordsPage = () => {
   )
 }
 
-export default AssetWithdrawRecordsPage
+export default MaterialTransferRecordsPage

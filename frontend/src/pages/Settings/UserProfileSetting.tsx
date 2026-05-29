@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import useAPIErrorHandler from '@/hooks/useAPIErrorHandler'
 import { getUserProfileAPI, updateUserProfileAPI } from '@/services/apis'
 import type { UserProfile, UserProfileUpdatePayload } from '@/types/api'
-import { applyFontScale, normalizeFontScale } from '@/utils/fontScale'
+import { applyFontScale, DEFAULT_FONT_SCALE, normalizeFontScale } from '@/utils/fontScale'
 import { showSuccess, showWarning } from '@/utils/toastHelper'
 
 type ProfileForm = {
@@ -18,7 +18,7 @@ const emptyForm: ProfileForm = {
   groupName: '',
   email: '',
   address: '',
-  fontScale: 1,
+  fontScale: DEFAULT_FONT_SCALE,
 }
 
 const readonlyInputClass = 'w-full rounded border border-gray-200 bg-gray-100 px-3 py-2 text-gray-600'

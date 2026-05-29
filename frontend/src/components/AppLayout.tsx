@@ -9,7 +9,8 @@ const getPageTitle = (pathname: string) => {
   if (pathname.startsWith('/project-management')) return '專案管理'
   if (pathname.startsWith('/work-report/daily')) return '每日工作紀錄'
   if (pathname.startsWith('/work-report/weekly')) return '每週工作紀錄'
-  if (pathname.startsWith('/asset-inventory')) return '資產盤點'
+  if (pathname.startsWith('/asset-inventory')) return '資財管理'
+  if (pathname.startsWith('/material-inventory')) return '材料盤點'
   if (pathname.startsWith('/settings')) return '設定'
   return '專案管理系統'
 }

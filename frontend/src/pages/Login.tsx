@@ -4,7 +4,7 @@ import PageMeta from '@/components/PageMeta'
 import useAPIErrorHandler from '@/hooks/useAPIErrorHandler'
 import { getCompanyInfoAPI, loginAPI } from '@/services/apis'
 import { saveAccount, saveRoleKey, saveToken } from '@/utils/auth'
-import { applyFontScale } from '@/utils/fontScale'
+import { applyFontScale, DEFAULT_FONT_SCALE } from '@/utils/fontScale'
 import { showError, showSuccess } from '@/utils/toastHelper'
 
 type InputProps = {
@@ -92,7 +92,7 @@ const LoginPage = () => {
       const token = String(res.data?.token ?? '')
       const roleKey = String(res.data?.roleKey ?? '')
       const account = String(res.data?.account ?? username)
-      const fontScale = res.data?.fontScale ?? 1
+      const fontScale = res.data?.fontScale ?? DEFAULT_FONT_SCALE
 
       if (!token) {
         showError({

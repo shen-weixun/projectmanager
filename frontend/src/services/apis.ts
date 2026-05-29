@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 import type { AxiosRequestConfig } from 'axios';
 import { getToken, removeToken } from '../utils/auth';
 
@@ -84,12 +84,17 @@ import type { LoginResponse, LoginPayload } from '@/types/api';
 import type {
     AssetWithdrawRecord,
     AssetItem,
+    AssetNameOption,
     AssetPayload,
+    MaterialItem,
+    MaterialPayload,
+    MaterialTransferRecord,
     PMHistoryRecord,
     PMProject,
     RDHistoryRecord,
     RDReport,
     WithdrawAssetPayload,
+    TransferMaterialPayload,
 } from '@/types/api';
 import type { UserProfile, UserProfileUpdatePayload } from '@/types/api';
 import type { UserListItem } from '@/types/api';
@@ -384,7 +389,15 @@ export const deleteDepartmentGroupAPI = (departmentId: number, groupId: number) 
 // 取得財產清單。
 export const getAssetInventoryAPI = () => safeRequest<AssetItem[]>('get', '/asset-inventory');
 
-// 取得財產取出紀錄。
+export const getAssetNameOptionsAPI = () => safeRequest<AssetNameOption[]>('get', '/asset-inventory/name-options');
+
+export const createAssetNameOptionAPI = (value: string) =>
+    safeRequest<AssetNameOption, { value: string }>('post', '/asset-inventory/name-options', { value });
+
+export const deleteAssetNameOptionAPI = (id: number) =>
+    safeRequest<{ id: number }>('delete', `/asset-inventory/name-options/${id}`);
+
+// 取得財產移管紀錄。
 export const getAssetWithdrawRecordsAPI = () =>
     safeRequest<AssetWithdrawRecord[]>('get', '/asset-inventory/withdraw-records');
 
@@ -396,15 +409,35 @@ export const createAssetInventoryAPI = (payload: AssetPayload) =>
 export const updateAssetInventoryAPI = (id: number, payload: AssetPayload) =>
     safeRequest<AssetItem, AssetPayload>('patch', `/asset-inventory/${id}`, payload);
 
-// 取出指定數量的財產，後端會回傳更新後的財產項目。
-export const withdrawAssetInventoryAPI = ({ id, quantity, withdrawer }: WithdrawAssetPayload) =>
-    safeRequest<AssetItem, { quantity: number; withdrawer: string }>('patch', `/asset-inventory/${id}/withdraw`, {
+// 移管指定數量的財產，後端會回傳更新後的財產項目。
+export const withdrawAssetInventoryAPI = ({ id, quantity, transferUserId }: WithdrawAssetPayload) =>
+    safeRequest<AssetItem, { quantity: number; transferUserId: number }>('patch', `/asset-inventory/${id}/withdraw`, {
         quantity,
-        withdrawer,
+        transferUserId,
     });
 
 // 刪除財產清單項目。
 export const deleteAssetInventoryAPI = (id: number) => safeRequest('delete', `/asset-inventory/${id}`);
+
+// ---------- Material Inventory API ----------
+export const getMaterialInventoryAPI = () => safeRequest<MaterialItem[]>('get', '/material-inventory');
+
+export const getMaterialTransferRecordsAPI = () =>
+    safeRequest<MaterialTransferRecord[]>('get', '/material-inventory/transfer-records');
+
+export const createMaterialInventoryAPI = (payload: MaterialPayload) =>
+    safeRequest<MaterialItem, MaterialPayload>('post', '/material-inventory', payload);
+
+export const updateMaterialInventoryAPI = (id: number, payload: MaterialPayload) =>
+    safeRequest<MaterialItem, MaterialPayload>('patch', `/material-inventory/${id}`, payload);
+
+export const transferMaterialInventoryAPI = ({ id, quantity, transferUserId }: TransferMaterialPayload) =>
+    safeRequest<MaterialItem, { quantity: number; transferUserId: number }>('patch', `/material-inventory/${id}/transfer`, {
+        quantity,
+        transferUserId,
+    });
+
+export const deleteMaterialInventoryAPI = (id: number) => safeRequest('delete', `/material-inventory/${id}`);
 
 // ---------- PM Weekly Report API ----------
 // 取得 PM 週報專案列表。

@@ -14,6 +14,7 @@ from utils.report_period import lock_user_past_tables_on_logout, unlock_current_
 logger = setup_logger(__name__)
 
 router = APIRouter(tags=["User"])
+DEFAULT_FONT_SCALE = 1.1
 
 
 class LoginRequest(BaseModel):
@@ -38,7 +39,7 @@ def serialize_user_profile(current_user: User, group: Group | None = None) -> di
         "groupName": current_user.group_name or "",
         "email": current_user.email or "",
         "address": current_user.address or "",
-        "fontScale": current_user.font_scale or 1.0,
+        "fontScale": current_user.font_scale or DEFAULT_FONT_SCALE,
     }
 
 
@@ -84,7 +85,7 @@ async def login(data: LoginRequest, db: Session = Depends(get_db)):
                 "roleKey": role_key,
                 "account": user.account,
                 "name": user.name,
-                "fontScale": user.font_scale or 1.0,
+                "fontScale": user.font_scale or DEFAULT_FONT_SCALE,
             },
         }
 
