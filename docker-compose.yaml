@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: projectmanager-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: qamstar_ims
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d qamstar_ims"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+    container_name: projectmanager-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: 123456
+      DB_NAME: qamstar_ims
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 3000
+      SERVER_DEBUG: "False"
+      ALLOWED_ORIGINS: http://localhost:8088,http://127.0.0.1:8088
+      JWT_SECRET_KEY: 9a8b7c6d5e4f3g2h1i0j9k8l7m6n5o4p
+    ports:
+      - "3000:3000"
+    command: >
+      sh -c "python -m models.__main__ && python app.py"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: projectmanager-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      VITE_BACKEND_HOST: backend
+      VITE_BACKEND_PORT: 3000
+    ports:
+      - "8088:8088"
+
+volumes:
+  postgres_data:
